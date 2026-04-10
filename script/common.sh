@@ -14,6 +14,14 @@ sidecar_source_env_file() {
 }
 
 sidecar_set_defaults() {
+  local script_dir default_home
+  script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+  if [[ "$(basename -- "${script_dir}")" == "script" && -f "${script_dir}/../install.sh" ]]; then
+    default_home=$(cd -- "${script_dir}/.." && pwd -P)/.runtime
+  else
+    default_home="${script_dir}"
+  fi
+
   : "${MIHOMO_SIDECAR_NAME:=mihomo-sidecar}"
   : "${MIHOMO_SERVICE_NAME:=mihomo-sidecar.service}"
   : "${MIHOMO_SIDECAR_GROUP:=sidecar}"
@@ -22,8 +30,8 @@ sidecar_set_defaults() {
   : "${MIHOMO_TRANSPARENT_ENABLED:=0}"
   : "${MIHOMO_TRANSPARENT_UIDS:=}"
 
-  : "${MIHOMO_BIN:=/usr/local/bin/mihomo}"
-  : "${MIHOMO_HOME:=${HOME}/.mihomo}"
+  : "${MIHOMO_BIN:=}"
+  : "${MIHOMO_HOME:=${default_home}}"
 
   : "${MIHOMO_PROXY_GROUP:=PROXY}"
   : "${MIHOMO_API_HOST:=127.0.0.1}"
@@ -52,15 +60,19 @@ sidecar_apply_derived_defaults() {
   : "${MIHOMO_SUB2MIHOMO_SCRIPT:=${MIHOMO_HOME}/sub2mihomo.py}"
   : "${MIHOMO_TRANSPARENT_MODE_SCRIPT:=${MIHOMO_HOME}/transparent_mode.py}"
   : "${MIHOMO_SECRET_FILE:=${MIHOMO_STATE_DIR}/controller.secret}"
-  : "${MIHOMO_DISCOVERY_DIRS:=${MIHOMO_HOME}:${PWD}}"
+  : "${MIHOMO_DISCOVERY_DIRS:=}"
 }
 
 sidecar_load_config() {
   local script_dir repo_root repo_config explicit_config home_config runtime_config
 
   script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-  repo_root=$(cd -- "${script_dir}/.." && pwd -P 2>/dev/null || true)
-  repo_config="${repo_root}/config/sidecar.env"
+  repo_root=""
+  repo_config=""
+  if [[ "$(basename -- "${script_dir}")" == "script" && -f "${script_dir}/../install.sh" ]]; then
+    repo_root=$(cd -- "${script_dir}/.." && pwd -P 2>/dev/null || true)
+    repo_config="${repo_root}/config/sidecar.env"
+  fi
   explicit_config=${MIHOMO_SIDECAR_CONFIG:-}
 
   sidecar_set_defaults

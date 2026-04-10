@@ -116,11 +116,12 @@ def collect_local_networks() -> Set[ipaddress.IPv4Network]:
 
 def walk_candidate_files(scan_dirs: Iterable[Path]) -> Iterator[Path]:
     seen: Set[Path] = set()
+    allowed_names = {"config.yaml", "config.yml", "runtime.env", "sidecar.env"}
     for root in scan_dirs:
         if not root.exists():
             continue
         if root.is_file():
-            if root not in seen:
+            if root.name in allowed_names and root not in seen:
                 seen.add(root)
                 yield root
             continue
@@ -128,8 +129,9 @@ def walk_candidate_files(scan_dirs: Iterable[Path]) -> Iterator[Path]:
             rel_depth = len(Path(dirpath).relative_to(root).parts)
             if rel_depth >= 3:
                 dirnames[:] = []
+            dirnames[:] = [name for name in dirnames if name not in {"docs", "examples", ".git", "__pycache__"}]
             for name in filenames:
-                if name in {"config.yaml", "config.yml", "runtime.env", "sidecar.env"} or name.endswith((".yaml", ".yml", ".env")):
+                if name in allowed_names:
                     file_path = Path(dirpath) / name
                     if file_path not in seen:
                         seen.add(file_path)
@@ -268,13 +270,28 @@ def choose_fake_ip_range(
     used_tun_nets: Set[ipaddress.IPv4Network],
 ) -> str:
     preferred_net = ipaddress.ip_network(preferred, strict=False)
-    if not overlaps_any(preferred_net, used_fake_ip | used_local | used_tun_nets):
+    used = used_fake_ip | used_local | used_tun_nets
+    if not overlaps_any(preferred_net, used):
         return preferred
 
     reserved_supernet = ipaddress.ip_network("198.18.0.0/15")
-    for candidate in iter_same_prefix_candidates(preferred_net, reserved_supernet):
-        if not overlaps_any(candidate, used_fake_ip | used_local | used_tun_nets):
-            return f"{candidate.network_address + 1}/{candidate.prefixlen}"
+
+    # 先尝试同等前缀长度的其他候选，再逐步细分到更小网段，避免因为一小段 TUN 子网占用就整片 /16 不可用。
+    max_prefixlen = 24
+    preferred_parents = []
+    if preferred_net.subnet_of(ipaddress.ip_network("198.19.0.0/16")):
+        preferred_parents.append(ipaddress.ip_network("198.19.0.0/16"))
+    preferred_parents.append(reserved_supernet)
+    for candidate_prefix in range(preferred_net.prefixlen, max_prefixlen + 1):
+        for parent in preferred_parents:
+            if candidate_prefix < parent.prefixlen:
+                continue
+            for candidate in parent.subnets(new_prefix=candidate_prefix):
+                if candidate_prefix == preferred_net.prefixlen and candidate == preferred_net:
+                    continue
+                if overlaps_any(candidate, used):
+                    continue
+                return f"{candidate.network_address + 1}/{candidate.prefixlen}"
     raise RuntimeError(f"找不到可用的 fake-ip-range，起始值为 {preferred}")
 
 
@@ -366,7 +383,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="检测 Mihomo sidecar 运行时资源并输出 runtime.env")
     parser.add_argument(
         "--config",
-        help="sidecar.env 路径；默认按仓库 config/sidecar.env 和 MIHOMO_HOME/sidecar.env 自动发现",
+        help="sidecar.env 路径；默认按仓库 config/sidecar.env 和当前运行目录的 sidecar.env 自动发现",
     )
     parser.add_argument(
         "--write",
@@ -376,7 +393,7 @@ def parse_args() -> argparse.Namespace:
         "--scan-dir",
         action="append",
         default=[],
-        help="额外扫描目录，用于检测 fake-ip-range / tun subnet / ports 冲突",
+        help="额外扫描目录，用于检测 fake-ip-range / tun subnet / ports 冲突；默认不会扫描当前工作目录",
     )
     return parser.parse_args()
 
@@ -393,7 +410,7 @@ def main() -> None:
     for raw in args.scan_dir:
         scan_dirs.append(Path(raw).expanduser())
     config_yaml = Path(config["MIHOMO_CONFIG_YAML"]).expanduser()
-    scan_dirs.extend([script_path.parent.parent, Path.cwd(), config_yaml.parent, Path(config["MIHOMO_HOME"]).expanduser()])
+    scan_dirs.extend([config_yaml.parent, Path(config["MIHOMO_HOME"]).expanduser()])
 
     runtime = build_runtime_config(config, scan_dirs)
     output = Path(args.write).expanduser() if args.write else None

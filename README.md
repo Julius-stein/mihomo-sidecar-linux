@@ -2,6 +2,9 @@
 
 一个面向多用户 Linux 共享服务器的 Mihomo sidecar 工具。
 
+法律与合规提示：
+本项目仅用于 Linux 网络、策略路由与代理隔离的学习交流、研究和合规测试。请务必遵守你所在地以及目标网络环境的法律法规、单位制度与服务条款。请勿将本项目用于绕过监管、未授权访问、批量代理转售或任何违法违规用途。
+
 这个项目的目标不是“把整台共享服务器切成全局代理机”，而是提供两种更克制、更适合多人环境的能力：
 
 - `sidecar <cmd...>`：让单个命令走代理
@@ -15,6 +18,14 @@
 4. 把需要使用进程级代理的用户加入 `sidecar` 组
 5. 普通场景优先使用 `sidecar <cmd>`
 6. 需要整用户透明代理时，再用 `sidecar-on`
+
+当前版本已经去掉了几个原型期的强假设：
+
+- 不再默认使用 `~/.mihomo`
+- 不再假设 `mihomo` 固定安装在 `/usr/local/bin/mihomo`
+- 不再默认扫描用户家目录里的 Mihomo 运行目录
+
+如果没有显式传 `--mihomo-home`，安装器会使用仓库内的 `./.runtime` 作为默认运行目录，便于开发机试装；面向正式部署时，仍建议显式指定例如 `/opt/mihomo-sidecar`。
 
 ## 项目目标
 
@@ -103,7 +114,7 @@ cd mihomo-sidecar-linux
 
 ### 3. 按需准备静态配置
 
-默认情况下，不改任何文件也能直接运行安装器，因为脚本内置默认值。
+默认情况下，不改任何文件也能直接运行安装器，但正式部署仍建议显式传入 `--mihomo-home`，不要依赖开发态默认目录。
 
 如果你想显式指定路径和组信息，可以先复制模板：
 
@@ -129,6 +140,12 @@ sudo ./install.sh \
   --subscription-url 'https://example.com/subscription'
 ```
 
+如果你只是想先在当前仓库里快速装一份运行目录，也可以省略 `--mihomo-home`，这时默认落在：
+
+```bash
+./.runtime
+```
+
 如果你已经把订阅保存成文件：
 
 ```bash
@@ -139,12 +156,14 @@ sudo ./install.sh \
 
 安装器会做这些事：
 
-- 自动 `which mihomo`；如果没找到，会直接报错并给出官方 release 链接
+- 优先使用显式配置的 `MIHOMO_BIN`
+- 如果没配置，再自动 `which mihomo`
+- 还找不到时，直接报错并给出官方 release 链接
 - 安装脚本和 CLI
-- 生成 `/opt/mihomo-sidecar/sidecar.env`
-- 自动探测共享资源并生成 `/opt/mihomo-sidecar/state/runtime.env`
-- 从订阅生成 `/opt/mihomo-sidecar/config.yaml`
-- 生成 `/opt/mihomo-sidecar/state/controller.secret`
+- 生成 `${MIHOMO_HOME}/sidecar.env`
+- 自动探测共享资源并生成 `${MIHOMO_HOME}/state/runtime.env`
+- 从订阅生成 `${MIHOMO_HOME}/config.yaml`
+- 生成 `${MIHOMO_HOME}/state/controller.secret`
 - 渲染 systemd unit
 
 如果当前环境能检测到 systemd 且目标 unit 目录可写，安装器也会顺手把 unit 拷进去。
@@ -156,6 +175,9 @@ ${MIHOMO_HOME}/config.yaml
 ```
 
 但这已经不是推荐主路径。
+
+再次强调：
+本项目仅供学习交流、实验验证与合规测试使用。是否可以访问外部网络、是否可以建立代理、是否可以转发流量，取决于你所在地区和所在单位的规则。请不要把“能用”误解成“可以随意用”。
 
 ### 5. 启动服务
 
@@ -373,6 +395,22 @@ sidecar-node --index 3
 
 - [MetaCubeX/mihomo releases](https://github.com/MetaCubeX/mihomo/releases)
 
+一个常见部署方式是：
+
+1. 先从官方 release 下载适合你系统架构的 `mihomo`
+2. 把二进制放到系统 `PATH` 中，例如 `/usr/local/bin/mihomo`
+3. 运行 `which mihomo` 确认可被发现
+4. 再执行本项目的 `install.sh`
+
+如果你不想改系统 `PATH`，也可以直接传：
+
+```bash
+sudo ./install.sh \
+  --mihomo-home /opt/mihomo-sidecar \
+  --mihomo-bin /path/to/mihomo \
+  --subscription-url 'https://example.com/subscription'
+```
+
 ## 安全说明
 
 最重要的安全建议只有几条，但每条都别省：
@@ -381,6 +419,9 @@ sidecar-node --index 3
 - 不要把真实 `secret`、订阅、节点密码提交进 Git
 - 只把需要使用进程级代理的用户加入 `sidecar` 组
 - 多实例部署时，确保 TUN / mark / table / priority / ports / chain / fake-ip / TUN 子网都唯一
+
+第三次强调法律与合规边界：
+本项目不是“翻墙工具打包器”，而是一个面向 Linux 多用户环境的网络隔离与 sidecar 原型工程。请仅在合法、合规、获得授权的网络环境中使用它；由误用、滥用或违法使用引发的后果，应由实际使用者自行承担。
 
 更多细节见 [docs/security.md](docs/security.md)。
 

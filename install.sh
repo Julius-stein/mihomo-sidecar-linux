@@ -9,6 +9,9 @@ Install mihomo-sidecar-linux into one runtime directory.
 
 Common path:
   sudo ./install.sh --mihomo-home /opt/mihomo-sidecar --subscription-url 'https://example.com/subscription'
+
+If --mihomo-home is omitted, install.sh uses a repo-local runtime directory:
+  ./.runtime
 EOF
 }
 

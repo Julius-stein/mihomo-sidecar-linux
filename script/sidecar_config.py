@@ -15,8 +15,7 @@ DEFAULTS: Dict[str, str] = {
     "MIHOMO_TARGET_UID": "",
     "MIHOMO_TRANSPARENT_ENABLED": "0",
     "MIHOMO_TRANSPARENT_UIDS": "",
-    "MIHOMO_BIN": "/usr/local/bin/mihomo",
-    "MIHOMO_HOME": "${HOME}/.mihomo",
+    "MIHOMO_BIN": "",
     "MIHOMO_PROXY_GROUP": "PROXY",
     "MIHOMO_API_HOST": "127.0.0.1",
     "MIHOMO_API_PORT": "9091",
@@ -42,7 +41,7 @@ DERIVED_DEFAULTS: Dict[str, str] = {
     "MIHOMO_SUB2MIHOMO_SCRIPT": "${MIHOMO_HOME}/sub2mihomo.py",
     "MIHOMO_TRANSPARENT_MODE_SCRIPT": "${MIHOMO_HOME}/transparent_mode.py",
     "MIHOMO_SECRET_FILE": "${MIHOMO_STATE_DIR}/controller.secret",
-    "MIHOMO_DISCOVERY_DIRS": "${MIHOMO_HOME}:${PWD}",
+    "MIHOMO_DISCOVERY_DIRS": "",
 }
 
 _VAR_PATTERN = re.compile(r"\$(\w+)|\$\{([^}]+)\}")
@@ -97,9 +96,18 @@ def apply_defaults(config: Dict[str, str], explicit_keys: set[str] | None = None
     return out
 
 
+def default_mihomo_home(script_path: Path) -> str:
+    resolved = script_path.resolve()
+    script_dir = resolved.parent
+    if script_dir.name == "script" and (script_dir.parent / "install.sh").is_file():
+        return str(script_dir.parent / ".runtime")
+    return str(script_dir)
+
+
 def _candidate_config_paths(script_path: Path, explicit_config: str | None) -> Iterable[Path]:
-    repo_root = script_path.resolve().parent.parent
-    yield repo_root / "config" / "sidecar.env"
+    resolved = script_path.resolve()
+    if resolved.parent.name == "script" and (resolved.parent.parent / "install.sh").is_file():
+        yield resolved.parent.parent / "config" / "sidecar.env"
     if explicit_config:
         yield Path(explicit_config).expanduser()
 
@@ -107,24 +115,32 @@ def _candidate_config_paths(script_path: Path, explicit_config: str | None) -> I
 def load_config(script_path: Path, explicit_config: str | None = None) -> Dict[str, str]:
     config: Dict[str, str] = {}
     explicit_keys: set[str] = set()
+    fallback_home = default_mihomo_home(script_path)
+    config["MIHOMO_HOME"] = fallback_home
     config.update(apply_defaults(config, explicit_keys))
 
     for candidate in _candidate_config_paths(script_path, explicit_config):
         parsed = parse_env_file(candidate, config)
         explicit_keys.update(parsed)
         config.update(parsed)
+        if not config.get("MIHOMO_HOME"):
+            config["MIHOMO_HOME"] = fallback_home
         config = apply_defaults(config, explicit_keys)
 
     home_config = Path(config["MIHOMO_HOME"]).expanduser() / "sidecar.env"
     parsed_home = parse_env_file(home_config, config)
     explicit_keys.update(parsed_home)
     config.update(parsed_home)
+    if not config.get("MIHOMO_HOME"):
+        config["MIHOMO_HOME"] = fallback_home
     config = apply_defaults(config, explicit_keys)
 
     runtime_env = Path(config["MIHOMO_RUNTIME_ENV"]).expanduser()
     parsed_runtime = parse_env_file(runtime_env, config)
     explicit_keys.update(parsed_runtime)
     config.update(parsed_runtime)
+    if not config.get("MIHOMO_HOME"):
+        config["MIHOMO_HOME"] = fallback_home
     return apply_defaults(config, explicit_keys)
 
 
