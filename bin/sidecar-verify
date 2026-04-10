@@ -2,9 +2,9 @@
 set -euo pipefail
 
 BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-SIDEcar_ROOT=$(cd -- "${BIN_DIR}/.." && pwd -P)
-export MIHOMO_HOME="${MIHOMO_HOME:-${SIDEcar_ROOT}}"
-export MIHOMO_SIDECAR_CONFIG="${MIHOMO_SIDECAR_CONFIG:-${SIDEcar_ROOT}/sidecar.env}"
+SIDECAR_ROOT=$(cd -- "${BIN_DIR}/.." && pwd -P)
+export MIHOMO_HOME="${MIHOMO_HOME:-${SIDECAR_ROOT}}"
+export MIHOMO_SIDECAR_CONFIG="${MIHOMO_SIDECAR_CONFIG:-${SIDECAR_ROOT}/sidecar.env}"
 if [[ "$#" -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
   cat <<'EOF'
 usage: sidecar-verify [--network-check] [--dns-domain DOMAIN] [--public-ip-url URL]

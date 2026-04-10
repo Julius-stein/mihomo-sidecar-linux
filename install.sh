@@ -76,6 +76,15 @@ detect_systemd_unit_dir() {
   return 1
 }
 
+normalize_dir_path() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+
+print(os.path.abspath(os.path.expanduser(sys.argv[1])))
+PY
+}
+
 write_bin_wrapper() {
   local target_dir=$1 cmd_name=$2 target_path=$3 wrapper_path
   wrapper_path="${target_dir}/${cmd_name}"
@@ -145,7 +154,7 @@ EOF
   exit 2
 fi
 
-MIHOMO_HOME=${work_dir}
+MIHOMO_HOME=$(normalize_dir_path "${work_dir}")
 
 if resolved_mihomo_bin=$(resolve_mihomo_bin); then
   MIHOMO_BIN="${resolved_mihomo_bin}"
@@ -180,6 +189,7 @@ fi
 if [[ -z "${install_bin_dir}" ]]; then
   install_bin_dir="/usr/local/bin"
 fi
+install_bin_dir=$(normalize_dir_path "${install_bin_dir}")
 
 if [[ -z "${systemd_unit_dir}" ]]; then
   cat >&2 <<'EOF'
