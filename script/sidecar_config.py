@@ -111,11 +111,12 @@ def default_mihomo_home(script_path: Path, explicit_config: str | None = None) -
 
 
 def _candidate_config_paths(script_path: Path, explicit_config: str | None) -> Iterable[Path]:
+    if explicit_config:
+        yield Path(explicit_config).expanduser()
+        return
     resolved = script_path.resolve()
     if resolved.parent.name == "script" and (resolved.parent.parent / "install.sh").is_file():
         yield resolved.parent.parent / "config" / "sidecar.env"
-    if explicit_config:
-        yield Path(explicit_config).expanduser()
 
 
 def load_config(script_path: Path, explicit_config: str | None = None) -> Dict[str, str]:
