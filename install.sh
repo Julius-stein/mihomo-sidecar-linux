@@ -83,6 +83,53 @@ print(os.path.abspath(os.path.expanduser(sys.argv[1])))
 PY
 }
 
+ensure_sidecar_group() {
+  local existing_gid
+  if getent group "${MIHOMO_SIDECAR_GROUP}" >/dev/null 2>&1; then
+    existing_gid=$(getent group "${MIHOMO_SIDECAR_GROUP}" | awk -F: '{print $3}')
+    if [[ "${existing_gid}" != "${MIHOMO_TARGET_GID}" ]]; then
+      cat >&2 <<EOF
+group ${MIHOMO_SIDECAR_GROUP} already exists, but gid=${existing_gid}.
+Expected gid=${MIHOMO_TARGET_GID}.
+
+Please align the group gid first, then rerun install.sh.
+EOF
+      exit 1
+    fi
+    return 0
+  fi
+
+  groupadd -g "${MIHOMO_TARGET_GID}" "${MIHOMO_SIDECAR_GROUP}"
+}
+
+set_runtime_permissions() {
+  local mutable_sub_root
+  mutable_sub_root="${MIHOMO_HOME}/sub"
+
+  mkdir -p "${MIHOMO_HOME}" "${MIHOMO_HOME}/bin" "${MIHOMO_STATE_DIR}" "${mutable_sub_root}"
+  chmod 0755 "${MIHOMO_HOME}" "${MIHOMO_HOME}/bin"
+  chown root:"${MIHOMO_SIDECAR_GROUP}" "${MIHOMO_STATE_DIR}" "${mutable_sub_root}"
+  chmod 0750 "${MIHOMO_STATE_DIR}"
+  chmod 3770 "${mutable_sub_root}"
+
+  if [[ ! -f "${MIHOMO_CONFIG_YAML}" ]]; then
+    printf '# managed by sidecar-subscribe\n' > "${MIHOMO_CONFIG_YAML}"
+  fi
+
+  if [[ ! -f "${MIHOMO_SECRET_FILE}" ]]; then
+    generate_secret > "${MIHOMO_SECRET_FILE}"
+  fi
+
+  chown root:"${MIHOMO_SIDECAR_GROUP}" "${MIHOMO_CONFIG_YAML}" "${MIHOMO_SECRET_FILE}"
+  chmod 0664 "${MIHOMO_CONFIG_YAML}"
+  chmod 0640 "${MIHOMO_SECRET_FILE}"
+
+  if [[ -f "${MIHOMO_RUNTIME_ENV}" ]]; then
+    chown root:root "${MIHOMO_RUNTIME_ENV}"
+    chmod 0644 "${MIHOMO_RUNTIME_ENV}"
+  fi
+}
+
 write_bin_wrapper() {
   local target_dir=$1 cmd_name=$2 target_path=$3 wrapper_path
   wrapper_path="${target_dir}/${cmd_name}"
@@ -181,7 +228,8 @@ EOF
   exit 1
 fi
 
-mkdir -p "${MIHOMO_HOME}" "${MIHOMO_STATE_DIR}" "${MIHOMO_HOME}/bin"
+ensure_sidecar_group
+set_runtime_permissions
 
 cat > "${MIHOMO_HOME}/sidecar.env" <<EOF
 MIHOMO_SIDECAR_NAME="${MIHOMO_SIDECAR_NAME}"
@@ -231,9 +279,7 @@ if [[ ${skip_detect} -eq 0 ]]; then
     python3 "${ROOT_DIR}/script/detect_runtime.py" --write "${MIHOMO_STATE_DIR}/runtime.env"
 fi
 
-if [[ ! -f "${MIHOMO_SECRET_FILE}" ]]; then
-  generate_secret > "${MIHOMO_SECRET_FILE}"
-fi
+set_runtime_permissions
 
 rendered_unit="${MIHOMO_HOME}/${MIHOMO_SERVICE_NAME}"
 sed \
@@ -266,6 +312,7 @@ Installed:
   controller secret  ${MIHOMO_SECRET_FILE}
   systemd unit       ${systemd_unit_dir}/${MIHOMO_SERVICE_NAME}
   command wrappers   ${install_bin_dir}
+  mutable group      ${MIHOMO_SIDECAR_GROUP} (gid ${MIHOMO_TARGET_GID})
 EOF
 
 if [[ -f "${MIHOMO_CONFIG_YAML}" ]]; then

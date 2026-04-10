@@ -49,6 +49,11 @@ def api_request(path: str, method: str = "GET", data: dict | None = None):
             print(e.read().decode("utf-8", errors="replace"), file=sys.stderr)
         except Exception:
             pass
+        if e.code == 401:
+            print(f"controller: {API_BASE}", file=sys.stderr)
+            print(f"secret file: {CONFIG['MIHOMO_SECRET_FILE']}", file=sys.stderr)
+            print(f"config file: {CONFIG['MIHOMO_CONFIG_YAML']}", file=sys.stderr)
+            print("这通常表示 controller secret 不一致，或命令和 service 读取的不是同一套 workdir。", file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
         reason = getattr(e, "reason", e)

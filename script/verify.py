@@ -53,20 +53,27 @@ def ip_rule_matches(fwmark: str, table: str, priority: str) -> bool:
     proc = run_cmd(["ip", "rule", "show"])
     if proc.returncode != 0:
         return False
-    needle_mark = f"fwmark {fwmark}"
-    needle_lookup = f"lookup {table}"
-    needle_priority = f"{priority}:"
-    return any(
-        needle_priority in line and needle_mark in line and needle_lookup in line
-        for line in proc.stdout.splitlines()
-    )
+    normalized_mark = fwmark.lower()
+    for line in proc.stdout.splitlines():
+        lowered = line.lower()
+        if f"fwmark {normalized_mark}" not in lowered:
+            continue
+        if f"lookup {table}" not in lowered and f"table {table}" not in lowered:
+            continue
+        if lowered.startswith(f"{priority}:") or f" pref {priority}" in lowered or f" priority {priority}" in lowered:
+            return True
+    return False
 
 
 def ip_route_matches(table: str, tun_dev: str) -> bool:
     proc = run_cmd(["ip", "route", "show", "table", table])
     if proc.returncode != 0:
         return False
-    return any(line.strip() == f"default dev {tun_dev}" for line in proc.stdout.splitlines())
+    for line in proc.stdout.splitlines():
+        normalized = " ".join(line.split())
+        if normalized.startswith(f"default dev {tun_dev}"):
+            return True
+    return False
 
 
 def iptables_contains(table: str, expected: Iterable[str]) -> tuple[bool, str]:

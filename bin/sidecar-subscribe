@@ -37,6 +37,37 @@ restart_service=0
 list_only=0
 passthrough=()
 
+die() {
+  echo "$*" >&2
+  exit 1
+}
+
+current_username() {
+  id -un 2>/dev/null || printf 'uid-%s\n' "$(id -u)"
+}
+
+ensure_group_member() {
+  if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    return 0
+  fi
+  if id -nG 2>/dev/null | tr ' ' '\n' | grep -Fxq "${MIHOMO_SIDECAR_GROUP}"; then
+    return 0
+  fi
+  die "current user is not in group ${MIHOMO_SIDECAR_GROUP}. Ask the administrator to run: sudo usermod -aG ${MIHOMO_SIDECAR_GROUP} <your-user>"
+}
+
+require_readable_file() {
+  local path=$1 label=$2
+  [[ -f "${path}" ]] || die "${label} not found: ${path}. Please rerun: sudo ./install.sh"
+  [[ -r "${path}" ]] || die "${label} is not readable: ${path}. Check group ${MIHOMO_SIDECAR_GROUP} permissions."
+}
+
+require_writable_file() {
+  local path=$1 label=$2
+  [[ -f "${path}" ]] || die "${label} not found: ${path}. Please rerun: sudo ./install.sh"
+  [[ -w "${path}" ]] || die "${label} is not writable: ${path}. Check group ${MIHOMO_SIDECAR_GROUP} permissions."
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url)
@@ -81,14 +112,14 @@ if [[ -z "${subscription_url}" && -z "${subscription_file}" ]]; then
   exit 2
 fi
 
-mkdir -p "${MIHOMO_STATE_DIR}" "$(dirname -- "${MIHOMO_CONFIG_YAML}")" "${MIHOMO_HOME}/sub"
+ensure_group_member
+require_readable_file "${MIHOMO_SECRET_FILE}" "controller secret"
+require_writable_file "${MIHOMO_CONFIG_YAML}" "config.yaml"
 
-if [[ ! -f "${MIHOMO_SECRET_FILE}" ]]; then
-  python3 - <<'PY' > "${MIHOMO_SECRET_FILE}"
-import secrets
-print(secrets.token_hex(16))
-PY
-fi
+user_sub_dir="${MIHOMO_HOME}/sub/$(current_username)"
+mkdir -p "${user_sub_dir}" || die "cannot create subscription cache dir: ${user_sub_dir}. Check ${MIHOMO_HOME}/sub permissions."
+[[ -w "${user_sub_dir}" ]] || die "subscription cache dir is not writable: ${user_sub_dir}. Check ${MIHOMO_HOME}/sub permissions."
+chmod 0700 "${user_sub_dir}" 2>/dev/null || true
 
 controller_secret=$(tr -d '\r\n' < "${MIHOMO_SECRET_FILE}")
 subscription_source="${subscription_url:-${subscription_file}}"
@@ -96,8 +127,7 @@ sub_args=(
   --source "${subscription_source}"
   --output "${MIHOMO_CONFIG_YAML}"
   --secret "${controller_secret}"
-  --controller-secret-output "${MIHOMO_SECRET_FILE}"
-  --save-raw-dir "${MIHOMO_HOME}/sub"
+  --save-raw-dir "${user_sub_dir}"
 )
 if [[ ${#passthrough[@]} -gt 0 ]]; then
   sub_args+=("${passthrough[@]}")
@@ -155,8 +185,7 @@ print("Generated:")
 print(f"  config.yaml         {summary['output']}")
 print(f"  raw subscription    {summary['raw_output']}")
 print(f"  decoded subscription {summary['decoded_output']}")
-if summary.get("controller_secret_output"):
-    print(f"  controller secret   {summary['controller_secret_output']}")
+print(f"  controller secret   {work_dir}/state/controller.secret (reused)")
 print()
 print("Node summary:")
 print(f"  total nodes         {summary['total_nodes']}")

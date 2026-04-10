@@ -165,6 +165,12 @@ def read_mihomo_secret(config: Dict[str, str]) -> str | None:
     if env_secret:
         return env_secret
 
+    secret_file = Path(config["MIHOMO_SECRET_FILE"]).expanduser()
+    if secret_file.is_file():
+        secret = secret_file.read_text(encoding="utf-8", errors="replace").strip()
+        if secret:
+            return secret
+
     config_yaml = Path(config["MIHOMO_CONFIG_YAML"]).expanduser()
     if not config_yaml.is_file():
         return None
