@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ "$#" -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  cat <<'EOF'
+usage: sidecar-verify [--network-check] [--dns-domain DOMAIN] [--public-ip-url URL]
+
+Read-only verification for mihomo-sidecar-linux.
+Use sudo if you want iptables checks to succeed without permission warnings.
+EOF
+  exit 0
+fi
+
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  exec python3 "${BIN_DIR}/../script/verify.py" "$@"
+fi
+exec python3 "${BIN_DIR}/../verify.py" "$@"

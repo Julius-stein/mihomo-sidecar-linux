@@ -1,0 +1,61 @@
+# Example Mihomo config for the current sidecar prototype.
+# Keep these values aligned with the current scripts unless you also update:
+# - script/setup-rules.sh
+# - script/cleanup-rules.sh
+# - script/select_node.py
+
+mixed-port: 7891
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: true
+
+external-controller: 127.0.0.1:9091
+secret: "<REPLACE_WITH_RANDOM_CONTROLLER_SECRET>"
+
+dns:
+  enable: true
+  listen: 127.0.0.1:1054
+  enhanced-mode: fake-ip
+  # For multi-instance deployments, allocate a unique fake-ip-range per instance.
+  fake-ip-range: 198.19.0.1/16
+  ipv6: true
+  nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+
+tun:
+  enable: true
+  stack: mixed
+  device: Meta-sidecar
+  inet4-address:
+    # For multi-instance deployments, allocate a unique subnet per instance.
+    - 198.19.0.1/30
+  auto-route: false
+  auto-detect-interface: false
+  dns-hijack:
+    - any:53
+  strict-route: false
+
+proxies:
+  - name: "Example-Node"
+    type: trojan
+    server: example.com
+    port: 443
+    password: "<REPLACE_WITH_NODE_PASSWORD>"
+    sni: example.com
+    skip-cert-verify: false
+    udp: true
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - "Example-Node"
+
+rules:
+  - MATCH,PROXY
+
+profile:
+  store-selected: true
+  store-fake-ip: true

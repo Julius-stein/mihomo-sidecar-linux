@@ -1,0 +1,44 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  cat <<'EOF'
+usage: sidecar <command...>
+
+Run one command under the configured sidecar GID.
+EOF
+  exit 0
+fi
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../script/common.sh"
+elif [[ -f "${BIN_DIR}/../common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../common.sh"
+else
+  echo "common.sh not found" >&2
+  exit 1
+fi
+
+sidecar_load_config
+
+if [[ $# -eq 0 ]]; then
+  echo "usage: sidecar <command...>" >&2
+  exit 2
+fi
+
+if ! getent group "${MIHOMO_SIDECAR_GROUP}" >/dev/null 2>&1; then
+  echo "group not found: ${MIHOMO_SIDECAR_GROUP}" >&2
+  exit 1
+fi
+
+actual_gid=$(getent group "${MIHOMO_SIDECAR_GROUP}" | awk -F: '{print $3}')
+if [[ -n "${MIHOMO_TARGET_GID}" && "${actual_gid}" != "${MIHOMO_TARGET_GID}" ]]; then
+  echo "group ${MIHOMO_SIDECAR_GROUP} gid=${actual_gid}, but rules expect gid=${MIHOMO_TARGET_GID}" >&2
+  exit 1
+fi
+
+printf -v cmd '%q ' "$@"
+exec sg "${MIHOMO_SIDECAR_GROUP}" -c "bash -lc $cmd"

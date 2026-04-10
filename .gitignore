@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Logs / runtime traces
+*.log
+logs/
+*.pid
+
+# Local backups / editor
+*.bak
+*.tmp
+*.swp
+.DS_Store
+.vscode/
+.idea/
+
+# Runtime configs / secrets
+config.yaml
+config.yml
+config.local.yaml
+config.runtime.yaml
+config/sidecar.env
+.env
+.env.*
+*.secret
+*.secrets
+*.token
+secret.*
+
+# Mihomo runtime / generated state
+.mihomo/
+runtime/
+state/
+cache.db
+profile.db
+
+# Subscription caches / fetched artifacts
+sub/
+ruleset/
+*.sub
+*.subscription
+
+# OS-specific or miscellaneous local files
+*.orig

@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  cat <<'EOF'
+usage: sidecar-status
+
+Show current sidecar runtime parameters.
+EOF
+  exit 0
+fi
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../script/common.sh"
+elif [[ -f "${BIN_DIR}/../common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../common.sh"
+else
+  echo "common.sh not found" >&2
+  exit 1
+fi
+
+sidecar_load_config
+
+echo "service=${MIHOMO_SERVICE_NAME}"
+echo "mihomo_home=${MIHOMO_HOME}"
+echo "gid_mode_group=${MIHOMO_SIDECAR_GROUP}"
+echo "gid_mode_gid=${MIHOMO_TARGET_GID}"
+echo "transparent_enabled=${MIHOMO_TRANSPARENT_ENABLED}"
+echo "transparent_uids=${MIHOMO_TRANSPARENT_UIDS:-}"
+echo "tun_dev=${MIHOMO_TUN_DEV}"
+echo "api=${MIHOMO_API_HOST}:${MIHOMO_API_PORT}"
+echo "dns_port=${MIHOMO_DNS_PORT}"
+
+if [[ -x "${MIHOMO_NODE_SCRIPT}" ]]; then
+  python3 "${MIHOMO_NODE_SCRIPT}" --current 2>/dev/null || true
+fi

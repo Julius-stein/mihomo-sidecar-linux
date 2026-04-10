@@ -1,0 +1,24 @@
+# Replace the placeholders below before installing this unit:
+# - __MIHOMO_BIN__  : absolute path to mihomo, for example /usr/local/bin/mihomo
+# - __MIHOMO_HOME__ : runtime directory containing config.yaml, setup-rules.sh, cleanup-rules.sh
+
+[Unit]
+Description=Mihomo sidecar proxy service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__MIHOMO_HOME__
+EnvironmentFile=-__MIHOMO_HOME__/sidecar.env
+EnvironmentFile=-__MIHOMO_HOME__/state/runtime.env
+ExecStartPre=__MIHOMO_HOME__/cleanup-rules.sh
+ExecStart=__MIHOMO_BIN__ -d __MIHOMO_HOME__
+ExecStartPost=__MIHOMO_HOME__/setup-rules.sh
+ExecStopPost=__MIHOMO_HOME__/cleanup-rules.sh
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

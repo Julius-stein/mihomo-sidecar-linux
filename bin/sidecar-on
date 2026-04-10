@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  cat <<'EOF'
+usage: sidecar-on [UID]
+
+Enable transparent mode for one UID.
+Multiple users can be enabled at the same time.
+Defaults to the current user UID.
+EOF
+  exit 0
+fi
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../script/common.sh"
+elif [[ -f "${BIN_DIR}/../common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../common.sh"
+else
+  echo "common.sh not found" >&2
+  exit 1
+fi
+
+sidecar_load_config
+target_uid=${1:-$(id -u)}
+
+if [[ "${target_uid}" == "0" ]]; then
+  echo "refusing to transparently proxy uid 0" >&2
+  exit 1
+fi
+
+sudo python3 "${MIHOMO_TRANSPARENT_MODE_SCRIPT}" \
+  --config "${MIHOMO_HOME}/sidecar.env" \
+  --action add \
+  --uid "${target_uid}" >/dev/null
+
+echo "transparent mode enabled for uid ${target_uid}"

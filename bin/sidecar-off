@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  cat <<'EOF'
+usage: sidecar-off [UID|--all]
+
+Disable transparent mode for one UID.
+Defaults to the current user UID.
+Use --all to clear every transparent UID.
+EOF
+  exit 0
+fi
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../script/common.sh"
+elif [[ -f "${BIN_DIR}/../common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../common.sh"
+else
+  echo "common.sh not found" >&2
+  exit 1
+fi
+
+sidecar_load_config
+
+if [[ $# -gt 0 && "$1" == "--all" ]]; then
+  sudo python3 "${MIHOMO_TRANSPARENT_MODE_SCRIPT}" \
+    --config "${MIHOMO_HOME}/sidecar.env" \
+    --action clear >/dev/null
+  echo "transparent mode cleared for all uids"
+  exit 0
+fi
+
+target_uid=${1:-$(id -u)}
+sudo python3 "${MIHOMO_TRANSPARENT_MODE_SCRIPT}" \
+  --config "${MIHOMO_HOME}/sidecar.env" \
+  --action remove \
+  --uid "${target_uid}" >/dev/null
+
+echo "transparent mode disabled for uid ${target_uid}"

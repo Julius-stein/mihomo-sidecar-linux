@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  cat <<'EOF'
+usage: sidecar-node [--list] [--current] [--filter KEYWORD] [--use NAME] [--index N]
+
+Proxy group selection wrapper around select_node.py.
+EOF
+  exit 0
+fi
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../script/common.sh"
+elif [[ -f "${BIN_DIR}/../common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../common.sh"
+else
+  echo "common.sh not found" >&2
+  exit 1
+fi
+
+sidecar_load_config
+exec python3 "${MIHOMO_NODE_SCRIPT}" "$@"
