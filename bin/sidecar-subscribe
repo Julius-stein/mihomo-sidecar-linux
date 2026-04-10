@@ -15,6 +15,9 @@ if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
 fi
 
 BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+SIDEcar_ROOT=$(cd -- "${BIN_DIR}/.." && pwd -P)
+export MIHOMO_HOME="${MIHOMO_HOME:-${SIDEcar_ROOT}}"
+export MIHOMO_SIDECAR_CONFIG="${MIHOMO_SIDECAR_CONFIG:-${SIDEcar_ROOT}/sidecar.env}"
 if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
   # shellcheck disable=SC1091
   source "${BIN_DIR}/../script/common.sh"
@@ -77,6 +80,8 @@ if [[ -z "${subscription_url}" && -z "${subscription_file}" ]]; then
   show_help >&2
   exit 2
 fi
+
+mkdir -p "${MIHOMO_STATE_DIR}" "$(dirname -- "${MIHOMO_CONFIG_YAML}")" "${MIHOMO_HOME}/sub"
 
 if [[ ! -f "${MIHOMO_SECRET_FILE}" ]]; then
   python3 - <<'PY' > "${MIHOMO_SECRET_FILE}"

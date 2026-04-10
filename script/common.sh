@@ -14,10 +14,17 @@ sidecar_source_env_file() {
 }
 
 sidecar_set_defaults() {
-  local script_dir default_home
+  local script_dir default_home explicit_config
   script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-  if [[ "$(basename -- "${script_dir}")" == "script" && -f "${script_dir}/../install.sh" ]]; then
-    default_home=$(cd -- "${script_dir}/.." && pwd -P)/.runtime
+  explicit_config=${MIHOMO_SIDECAR_CONFIG:-}
+  if [[ -n "${explicit_config}" ]]; then
+    default_home=$(cd -- "$(dirname -- "${explicit_config}")" && pwd -P)
+  elif [[ -f "${script_dir}/sidecar.env" ]]; then
+    default_home="${script_dir}"
+  elif [[ -f "${script_dir}/../sidecar.env" ]]; then
+    default_home=$(cd -- "${script_dir}/.." && pwd -P)
+  elif [[ "$(basename -- "${script_dir}")" == "script" && -f "${script_dir}/../install.sh" ]]; then
+    default_home=$(cd -- "${script_dir}/.." && pwd -P)
   else
     default_home="${script_dir}"
   fi

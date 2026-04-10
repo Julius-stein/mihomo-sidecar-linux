@@ -96,11 +96,17 @@ def apply_defaults(config: Dict[str, str], explicit_keys: set[str] | None = None
     return out
 
 
-def default_mihomo_home(script_path: Path) -> str:
+def default_mihomo_home(script_path: Path, explicit_config: str | None = None) -> str:
     resolved = script_path.resolve()
     script_dir = resolved.parent
+    if explicit_config:
+        return str(Path(explicit_config).expanduser().resolve().parent)
+    if (script_dir / "sidecar.env").is_file():
+        return str(script_dir)
+    if (script_dir.parent / "sidecar.env").is_file():
+        return str(script_dir.parent)
     if script_dir.name == "script" and (script_dir.parent / "install.sh").is_file():
-        return str(script_dir.parent / ".runtime")
+        return str(script_dir.parent)
     return str(script_dir)
 
 
@@ -115,7 +121,7 @@ def _candidate_config_paths(script_path: Path, explicit_config: str | None) -> I
 def load_config(script_path: Path, explicit_config: str | None = None) -> Dict[str, str]:
     config: Dict[str, str] = {}
     explicit_keys: set[str] = set()
-    fallback_home = default_mihomo_home(script_path)
+    fallback_home = default_mihomo_home(script_path, explicit_config)
     config["MIHOMO_HOME"] = fallback_home
     config.update(apply_defaults(config, explicit_keys))
 
