@@ -13,8 +13,8 @@
 当前仓库已经具备统一配置、资源自动探测、安装脚本、节点选择、验证脚本和多 UID 透明代理状态管理。推荐使用方式是：
 
 1. `git clone`
-2. 准备一个订阅 URL 或本地订阅文件
-3. `sudo ./install.sh --subscription-url ...`
+2. `sudo ./install.sh`
+3. 用 `sidecar-subscribe` 导入订阅生成 `config.yaml`
 4. 把需要使用进程级代理的用户加入 `sidecar` 组
 5. 普通场景优先使用 `sidecar <cmd>`
 6. 需要整用户透明代理时，再用 `sidecar-on`
@@ -93,18 +93,47 @@ git clone <YOUR_REPO_URL>
 cd mihomo-sidecar-linux
 ```
 
-### 2. 准备订阅
+### 2. 安装运行环境
+
+安装器只负责把运行环境、自动探测结果、systemd unit、secret 和脚本骨架装好，不负责要求你当场提供订阅。
+
+最常见的安装方式：
+
+```bash
+sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
+```
+
+如果你只是想先在当前仓库里快速装一份运行目录，也可以省略 `--mihomo-home`，这时默认落在：
+
+```bash
+./.runtime
+```
+
+安装器会做这些事：
+
+- 优先使用显式配置的 `MIHOMO_BIN`
+- 如果没配置，再自动 `which mihomo`
+- 还找不到时，直接报错并给出官方 release 链接
+- 安装脚本和 CLI
+- 生成 `${MIHOMO_HOME}/sidecar.env`
+- 自动探测共享资源并生成 `${MIHOMO_HOME}/state/runtime.env`
+- 生成 `${MIHOMO_HOME}/state/controller.secret`
+- 渲染 systemd unit
+
+如果当前环境能检测到 systemd 且目标 unit 目录可写，安装器也会顺手把 unit 拷进去。
+
+### 3. 导入订阅 / 生成配置
 
 大多数用户只有一个订阅 URL，或者一个本地保存的 base64 / trojan 订阅内容。
 
-当前安装器已经支持直接从订阅生成 `config.yaml`，不再要求用户先手写完整 Mihomo 配置。
+这一步不再耦合在 `install.sh` 里，而是由单独命令完成。这样后续更新订阅、切换单节点、重生成配置时，不需要重新安装环境。
 
 支持两种入口：
 
-- `--subscription-url URL`
-- `--subscription-file FILE`
+- `sidecar-subscribe --url URL`
+- `sidecar-subscribe --file FILE`
 
-安装时会调用 [script/sub2mihomo.py](script/sub2mihomo.py)：
+内部会调用 [script/sub2mihomo.py](script/sub2mihomo.py)：
 
 - 拉取或读取订阅
 - 自动 base64 解码
@@ -112,7 +141,23 @@ cd mihomo-sidecar-linux
 - 生成 `config.yaml`
 - 生成并保存 controller secret
 
-### 3. 按需准备静态配置
+常见示例：
+
+```bash
+/opt/mihomo-sidecar/bin/sidecar-subscribe --url 'https://example.com/subscription' --all-nodes
+```
+
+```bash
+/opt/mihomo-sidecar/bin/sidecar-subscribe --file ./sub.txt --keyword HK
+```
+
+如果希望写完配置后立即重启服务，可以追加：
+
+```bash
+--restart
+```
+
+### 4. 按需准备静态配置
 
 默认情况下，不改任何文件也能直接运行安装器，但正式部署仍建议显式传入 `--mihomo-home`，不要依赖开发态默认目录。
 
@@ -129,44 +174,6 @@ cp config/sidecar.env.example config/sidecar.env
 - `MIHOMO_TARGET_GID`
 - `MIHOMO_SIDECAR_GROUP`
 - `MIHOMO_DISCOVERY_DIRS`
-
-### 4. 安装
-
-最常见的安装方式：
-
-```bash
-sudo ./install.sh \
-  --mihomo-home /opt/mihomo-sidecar \
-  --subscription-url 'https://example.com/subscription'
-```
-
-如果你只是想先在当前仓库里快速装一份运行目录，也可以省略 `--mihomo-home`，这时默认落在：
-
-```bash
-./.runtime
-```
-
-如果你已经把订阅保存成文件：
-
-```bash
-sudo ./install.sh \
-  --mihomo-home /opt/mihomo-sidecar \
-  --subscription-file ./sub.txt
-```
-
-安装器会做这些事：
-
-- 优先使用显式配置的 `MIHOMO_BIN`
-- 如果没配置，再自动 `which mihomo`
-- 还找不到时，直接报错并给出官方 release 链接
-- 安装脚本和 CLI
-- 生成 `${MIHOMO_HOME}/sidecar.env`
-- 自动探测共享资源并生成 `${MIHOMO_HOME}/state/runtime.env`
-- 从订阅生成 `${MIHOMO_HOME}/config.yaml`
-- 生成 `${MIHOMO_HOME}/state/controller.secret`
-- 渲染 systemd unit
-
-如果当前环境能检测到 systemd 且目标 unit 目录可写，安装器也会顺手把 unit 拷进去。
 
 如果你已经有手写的 `config.yaml`，也可以不传订阅参数，直接把它放到：
 
@@ -370,6 +377,12 @@ sidecar-node --use "Example-Node"
 sidecar-node --index 3
 ```
 
+如果你需要更新订阅或重建配置，而不是只切 Mihomo controller 里的当前节点，使用：
+
+```bash
+sidecar-subscribe --url 'https://example.com/subscription' --all-nodes --restart
+```
+
 它默认操作 `PROXY` 组，controller 鉴权 secret 默认从环境变量或 `config.yaml` 读取。
 
 ## 已知限制
@@ -407,8 +420,7 @@ sidecar-node --index 3
 ```bash
 sudo ./install.sh \
   --mihomo-home /opt/mihomo-sidecar \
-  --mihomo-bin /path/to/mihomo \
-  --subscription-url 'https://example.com/subscription'
+  --mihomo-bin /path/to/mihomo
 ```
 
 ## 安全说明

@@ -3,12 +3,12 @@ set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-usage: install.sh [--config FILE] [--mihomo-home DIR] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--subscription-url URL|--subscription-file FILE] [--skip-generate-config] [--skip-detect]
+usage: install.sh [--config FILE] [--mihomo-home DIR] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
 
-Install mihomo-sidecar-linux into one runtime directory.
+Install mihomo-sidecar-linux runtime files and system integration.
 
 Common path:
-  sudo ./install.sh --mihomo-home /opt/mihomo-sidecar --subscription-url 'https://example.com/subscription'
+  sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
 
 If --mihomo-home is omitted, install.sh uses a repo-local runtime directory:
   ./.runtime
@@ -28,10 +28,7 @@ sidecar_load_config
 install_config=""
 systemd_unit_dir=""
 install_bin_dir=""
-subscription_url=""
-subscription_file=""
 skip_detect=0
-skip_generate_config=0
 
 resolve_mihomo_bin() {
   if [[ -n "${MIHOMO_BIN:-}" && -x "${MIHOMO_BIN}" ]]; then
@@ -92,18 +89,6 @@ while [[ $# -gt 0 ]]; do
       install_bin_dir=$2
       shift 2
       ;;
-    --subscription-url)
-      subscription_url=$2
-      shift 2
-      ;;
-    --subscription-file)
-      subscription_file=$2
-      shift 2
-      ;;
-    --skip-generate-config)
-      skip_generate_config=1
-      shift
-      ;;
     --skip-detect)
       skip_detect=1
       shift
@@ -118,11 +103,6 @@ done
 if [[ -n "${install_config}" ]]; then
   export MIHOMO_SIDECAR_CONFIG="${install_config}"
   sidecar_load_config
-fi
-
-if [[ -n "${subscription_url}" && -n "${subscription_file}" ]]; then
-  echo "please use only one of --subscription-url or --subscription-file" >&2
-  exit 2
 fi
 
 if resolved_mihomo_bin=$(resolve_mihomo_bin); then
@@ -196,7 +176,7 @@ for src in common.sh setup-rules.sh cleanup-rules.sh select_node.py sub2mihomo.p
   install -m 0755 "${ROOT_DIR}/script/${src}" "${MIHOMO_HOME}/${src}"
 done
 
-for src in sidecar sidecar-node sidecar-validate sidecar-verify sidecar-on sidecar-off sidecar-status; do
+for src in sidecar sidecar-node sidecar-subscribe sidecar-validate sidecar-verify sidecar-on sidecar-off sidecar-status; do
   install -m 0755 "${ROOT_DIR}/bin/${src}" "${MIHOMO_HOME}/bin/${src}"
 done
 
@@ -207,34 +187,6 @@ fi
 
 if [[ ! -f "${MIHOMO_SECRET_FILE}" ]]; then
   generate_secret > "${MIHOMO_SECRET_FILE}"
-fi
-controller_secret=$(tr -d '\r\n' < "${MIHOMO_SECRET_FILE}")
-
-subscription_source=""
-if [[ -n "${subscription_url}" ]]; then
-  subscription_source="${subscription_url}"
-elif [[ -n "${subscription_file}" ]]; then
-  subscription_source="${subscription_file}"
-fi
-
-if [[ -n "${subscription_source}" ]]; then
-  MIHOMO_SIDECAR_CONFIG="${MIHOMO_HOME}/sidecar.env" \
-    python3 "${ROOT_DIR}/script/sub2mihomo.py" \
-      --source "${subscription_source}" \
-      --all-nodes \
-      --output "${MIHOMO_CONFIG_YAML}" \
-      --secret "${controller_secret}" \
-      --controller-secret-output "${MIHOMO_SECRET_FILE}"
-elif [[ ${skip_generate_config} -eq 0 && ! -f "${MIHOMO_CONFIG_YAML}" ]]; then
-  cat >&2 <<EOF
-config.yaml not found and no subscription source was provided.
-Provide one of:
-  --subscription-url URL
-  --subscription-file FILE
-Or place an existing config at:
-  ${MIHOMO_CONFIG_YAML}
-EOF
-  exit 1
 fi
 
 rendered_unit="${MIHOMO_HOME}/${MIHOMO_SERVICE_NAME}"
@@ -250,7 +202,7 @@ fi
 
 if [[ -n "${install_bin_dir}" ]]; then
   install -d "${install_bin_dir}"
-  for src in sidecar sidecar-node sidecar-validate sidecar-verify sidecar-on sidecar-off sidecar-status; do
+  for src in sidecar sidecar-node sidecar-subscribe sidecar-validate sidecar-verify sidecar-on sidecar-off sidecar-status; do
     install -m 0755 "${ROOT_DIR}/bin/${src}" "${install_bin_dir}/${src}"
   done
 fi
@@ -261,6 +213,12 @@ echo "config: ${MIHOMO_CONFIG_YAML}"
 echo "runtime env: ${MIHOMO_STATE_DIR}/runtime.env"
 echo "controller secret: ${MIHOMO_SECRET_FILE}"
 echo "systemd unit: ${rendered_unit}"
+if [[ -f "${MIHOMO_CONFIG_YAML}" ]]; then
+  echo "config status: existing config.yaml detected"
+else
+  echo "config status: config.yaml not created yet"
+  echo "next step: ${MIHOMO_HOME}/bin/sidecar-subscribe --url 'https://example.com/subscription'"
+fi
 if [[ -n "${systemd_unit_dir}" ]]; then
   echo "installed unit copy: ${systemd_unit_dir}/${MIHOMO_SERVICE_NAME}"
 fi

@@ -1,0 +1,98 @@
+#!/bin/bash
+set -euo pipefail
+
+show_help() {
+  cat <<'EOF'
+usage: sidecar-subscribe (--url URL | --file FILE) [--list] [--index N | --keyword KEYWORD | --all-nodes] [--restart]
+
+Generate or update Mihomo config.yaml from a subscription source.
+EOF
+}
+
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  show_help
+  exit 0
+fi
+
+BIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../script/common.sh"
+elif [[ -f "${BIN_DIR}/../common.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${BIN_DIR}/../common.sh"
+else
+  echo "common.sh not found" >&2
+  exit 1
+fi
+
+sidecar_load_config
+
+subscription_url=""
+subscription_file=""
+restart_service=0
+passthrough=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --url)
+      subscription_url=$2
+      shift 2
+      ;;
+    --file)
+      subscription_file=$2
+      shift 2
+      ;;
+    --index)
+      passthrough+=("--select-index" "$2")
+      shift 2
+      ;;
+    --keyword)
+      passthrough+=("--select-keyword" "$2")
+      shift 2
+      ;;
+    --restart)
+      restart_service=1
+      shift
+      ;;
+    *)
+      passthrough+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -n "${subscription_url}" && -n "${subscription_file}" ]]; then
+  echo "please use only one of --url or --file" >&2
+  exit 2
+fi
+
+if [[ -z "${subscription_url}" && -z "${subscription_file}" ]]; then
+  show_help >&2
+  exit 2
+fi
+
+if [[ ! -f "${MIHOMO_SECRET_FILE}" ]]; then
+  python3 - <<'PY' > "${MIHOMO_SECRET_FILE}"
+import secrets
+print(secrets.token_hex(16))
+PY
+fi
+
+controller_secret=$(tr -d '\r\n' < "${MIHOMO_SECRET_FILE}")
+subscription_source="${subscription_url:-${subscription_file}}"
+
+python3 "${MIHOMO_SUB2MIHOMO_SCRIPT}" \
+  --source "${subscription_source}" \
+  --output "${MIHOMO_CONFIG_YAML}" \
+  --secret "${controller_secret}" \
+  --controller-secret-output "${MIHOMO_SECRET_FILE}" \
+  "${passthrough[@]}"
+
+if [[ ${restart_service} -eq 1 ]]; then
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo systemctl restart "${MIHOMO_SERVICE_NAME}"
+  else
+    echo "systemctl not found; skipped restart" >&2
+  fi
+fi
