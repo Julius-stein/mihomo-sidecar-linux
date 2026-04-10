@@ -161,10 +161,6 @@ def dump_env_file(config: Dict[str, str], path: Path, header: str | None = None)
 
 
 def read_mihomo_secret(config: Dict[str, str]) -> str | None:
-    env_secret = os.environ.get("MIHOMO_API_SECRET")
-    if env_secret:
-        return env_secret
-
     secret_file = Path(config["MIHOMO_SECRET_FILE"]).expanduser()
     if secret_file.is_file():
         secret = secret_file.read_text(encoding="utf-8", errors="replace").strip()
@@ -172,12 +168,14 @@ def read_mihomo_secret(config: Dict[str, str]) -> str | None:
             return secret
 
     config_yaml = Path(config["MIHOMO_CONFIG_YAML"]).expanduser()
-    if not config_yaml.is_file():
-        return None
+    if config_yaml.is_file():
+        secret_pattern = re.compile(r'^\s*secret:\s*"?([^"\n#]+)"?\s*$')
+        for line in config_yaml.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = secret_pattern.match(line)
+            if match:
+                return match.group(1).strip()
 
-    secret_pattern = re.compile(r'^\s*secret:\s*"?([^"\n#]+)"?\s*$')
-    for line in config_yaml.read_text(encoding="utf-8", errors="replace").splitlines():
-        match = secret_pattern.match(line)
-        if match:
-            return match.group(1).strip()
+    env_secret = os.environ.get("MIHOMO_API_SECRET")
+    if env_secret:
+        return env_secret.strip()
     return None

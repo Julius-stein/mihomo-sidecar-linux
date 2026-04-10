@@ -86,6 +86,7 @@ def api_request(path: str, method: str = "GET", data: dict | None = None):
         print(f"config file: {CONFIG['MIHOMO_CONFIG_YAML']}", file=sys.stderr)
         print("已尝试 Bearer / raw Authorization / X-Secret 三种鉴权头。", file=sys.stderr)
         print("这通常表示 controller secret 不一致，或命令和 service 读取的不是同一套 workdir。", file=sys.stderr)
+        print("如果你当前 shell 设置过 MIHOMO_API_SECRET，请先 unset MIHOMO_API_SECRET 后重试。", file=sys.stderr)
     sys.exit(1)
 
 
