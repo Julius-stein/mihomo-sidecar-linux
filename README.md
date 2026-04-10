@@ -7,11 +7,11 @@
 - `sidecar <cmd...>`：让单个命令走代理
 - `sidecar-on` / `sidecar-off`：让单个用户进入透明代理模式
 
-当前仓库已经具备统一配置、资源自动探测、安装脚本、节点选择、验证脚本和多 UID 透明代理状态管理。推荐的使用方式就是你说的那种：
+当前仓库已经具备统一配置、资源自动探测、安装脚本、节点选择、验证脚本和多 UID 透明代理状态管理。推荐使用方式是：
 
 1. `git clone`
-2. 准备 `config.yaml`
-3. `./install.sh`
+2. 准备一个订阅 URL 或本地订阅文件
+3. `sudo ./install.sh --subscription-url ...`
 4. 把需要使用进程级代理的用户加入 `sidecar` 组
 5. 普通场景优先使用 `sidecar <cmd>`
 6. 需要整用户透明代理时，再用 `sidecar-on`
@@ -82,21 +82,24 @@ git clone <YOUR_REPO_URL>
 cd mihomo-sidecar-linux
 ```
 
-### 2. 准备 Mihomo 配置
+### 2. 准备订阅
 
-参考 [examples/config.template.yaml](examples/config.template.yaml) 生成你的 `config.yaml`。
+大多数用户只有一个订阅 URL，或者一个本地保存的 base64 / trojan 订阅内容。
 
-你至少要保证下面这些概念存在：
+当前安装器已经支持直接从订阅生成 `config.yaml`，不再要求用户先手写完整 Mihomo 配置。
 
-- `external-controller`
-- `secret`
-- `dns.listen`
-- `dns.fake-ip-range`
-- `tun.device`
-- `tun.inet4-address`
-- `proxy-groups: PROXY`
+支持两种入口：
 
-如果你准备让安装器自动探测资源并写入运行态参数，建议先把 `config.yaml` 也放进最终运行目录，便于一起核对。
+- `--subscription-url URL`
+- `--subscription-file FILE`
+
+安装时会调用 [script/sub2mihomo.py](script/sub2mihomo.py)：
+
+- 拉取或读取订阅
+- 自动 base64 解码
+- 解析 trojan 节点
+- 生成 `config.yaml`
+- 生成并保存 controller secret
 
 ### 3. 按需准备静态配置
 
@@ -118,28 +121,53 @@ cp config/sidecar.env.example config/sidecar.env
 
 ### 4. 安装
 
-```bash
-sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
-```
-
-如果你还想把 systemd unit 直接拷到系统目录：
+最常见的安装方式：
 
 ```bash
 sudo ./install.sh \
   --mihomo-home /opt/mihomo-sidecar \
-  --systemd-unit-dir /etc/systemd/system
+  --subscription-url 'https://example.com/subscription'
+```
+
+如果你已经把订阅保存成文件：
+
+```bash
+sudo ./install.sh \
+  --mihomo-home /opt/mihomo-sidecar \
+  --subscription-file ./sub.txt
 ```
 
 安装器会做这些事：
 
+- 自动 `which mihomo`；如果没找到，会直接报错并给出官方 release 链接
 - 安装脚本和 CLI
 - 生成 `/opt/mihomo-sidecar/sidecar.env`
 - 自动探测共享资源并生成 `/opt/mihomo-sidecar/state/runtime.env`
+- 从订阅生成 `/opt/mihomo-sidecar/config.yaml`
+- 生成 `/opt/mihomo-sidecar/state/controller.secret`
 - 渲染 systemd unit
+
+如果当前环境能检测到 systemd 且目标 unit 目录可写，安装器也会顺手把 unit 拷进去。
+
+如果你已经有手写的 `config.yaml`，也可以不传订阅参数，直接把它放到：
+
+```bash
+${MIHOMO_HOME}/config.yaml
+```
+
+但这已经不是推荐主路径。
 
 ### 5. 启动服务
 
 ```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now mihomo-sidecar.service
+```
+
+如果安装器没有自动把 unit 放进 systemd 目录，可以手动执行：
+
+```bash
+sudo cp /opt/mihomo-sidecar/mihomo-sidecar.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now mihomo-sidecar.service
 ```
@@ -223,6 +251,17 @@ sidecar pip install -r requirements.txt
 - [script/detect_runtime.py](script/detect_runtime.py)
 
 这正是为了解决你提到的那类问题：同机已有另一套 Mihomo 在使用默认 fake-ip 或默认 TUN 子网时，新实例不能再盲目复用默认值。
+
+当前会尽量为每个实例自动分配唯一的：
+
+- TUN 名
+- `fwmark`
+- route table
+- rule priority
+- API / DNS / mixed 端口
+- mangle / nat chain 名
+- `fake-ip-range`
+- TUN `inet4-address`
 
 ### 一个现实边界
 
@@ -319,6 +358,20 @@ sidecar-node --index 3
 - 透明代理的回环规避和更细粒度隔离还可以继续增强。
 - 自动探测依赖于可见资源与可扫描配置，不是绝对完备的全局发现。
 - 当前规则仍以 `iptables` 为主，没有抽象 `nftables` 差异。
+
+## Mihomo 安装说明
+
+安装器不会替你下载 Mihomo 二进制，但会优先自动发现系统里的 `mihomo`。
+
+逻辑是：
+
+1. 如果配置里的 `MIHOMO_BIN` 可执行，就用它
+2. 否则尝试 `which mihomo`
+3. 还找不到就报错并提示官方 release 页面
+
+官方 release：
+
+- [MetaCubeX/mihomo releases](https://github.com/MetaCubeX/mihomo/releases)
 
 ## 安全说明
 

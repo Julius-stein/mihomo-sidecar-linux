@@ -51,6 +51,7 @@ sidecar_apply_derived_defaults() {
   : "${MIHOMO_NODE_SCRIPT:=${MIHOMO_HOME}/select_node.py}"
   : "${MIHOMO_SUB2MIHOMO_SCRIPT:=${MIHOMO_HOME}/sub2mihomo.py}"
   : "${MIHOMO_TRANSPARENT_MODE_SCRIPT:=${MIHOMO_HOME}/transparent_mode.py}"
+  : "${MIHOMO_SECRET_FILE:=${MIHOMO_STATE_DIR}/controller.secret}"
   : "${MIHOMO_DISCOVERY_DIRS:=${MIHOMO_HOME}:${PWD}}"
 }
 

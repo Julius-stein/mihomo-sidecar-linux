@@ -15,6 +15,8 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from sidecar_config import load_config
 
+DEFAULT_NAMESERVERS = ["1.1.1.1", "8.8.8.8"]
+
 
 def fetch_text(source: str, timeout: int = 20) -> str:
     if source.startswith("http://") or source.startswith("https://"):
@@ -145,6 +147,7 @@ def build_config(
     fake_ip_range: str,
     inet4: str,
     proxy_group: str,
+    nameservers: List[str],
 ) -> str:
     lines = []
     lines.append(f"mixed-port: {mixed_port}")
@@ -163,8 +166,8 @@ def build_config(
     lines.append(f"  fake-ip-range: {fake_ip_range}")
     lines.append("  ipv6: true")
     lines.append("  nameserver:")
-    lines.append("    - 1.1.1.1")
-    lines.append("    - 8.8.8.8")
+    for nameserver in nameservers:
+        lines.append(f"    - {nameserver}")
     lines.append("")
     lines.append("tun:")
     lines.append("  enable: true")
@@ -200,7 +203,7 @@ def build_config(
         lines.append(f"      - {yaml_quote(n['name'])}")
     lines.append("")
     lines.append("rules:")
-    lines.append("  - MATCH,PROXY")
+    lines.append(f"  - MATCH,{proxy_group}")
     lines.append("")
     lines.append("profile:")
     lines.append("  store-selected: true")
@@ -255,7 +258,7 @@ def main():
     )
     ap.add_argument(
         "--output",
-        default=str(Path.home() / ".mihomo" / "config.yaml"),
+        default=str(Path(config_defaults["MIHOMO_CONFIG_YAML"]).expanduser()),
         help="输出 config.yaml 路径",
     )
     ap.add_argument(
@@ -272,9 +275,19 @@ def main():
     ap.add_argument("--inet4", default=config_defaults["MIHOMO_TUN_INET4"])
     ap.add_argument("--group-name", default=config_defaults["MIHOMO_PROXY_GROUP"])
     ap.add_argument(
+        "--nameserver",
+        action="append",
+        default=[],
+        help="可重复指定上游 DNS；默认使用 1.1.1.1 和 8.8.8.8",
+    )
+    ap.add_argument(
         "--save-raw-dir",
         default=str(Path(config_defaults["MIHOMO_HOME"]).expanduser() / "sub"),
         help="保存原始订阅和解码结果的目录",
+    )
+    ap.add_argument(
+        "--controller-secret-output",
+        help="把实际使用的 controller secret 单独写入文件",
     )
     args = ap.parse_args()
 
@@ -318,11 +331,16 @@ def main():
         fake_ip_range=args.fake_ip_range,
         inet4=args.inet4,
         proxy_group=args.group_name,
+        nameservers=args.nameserver or DEFAULT_NAMESERVERS,
     )
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(config, encoding="utf-8")
+    if args.controller_secret_output:
+        secret_out = Path(args.controller_secret_output)
+        secret_out.parent.mkdir(parents=True, exist_ok=True)
+        secret_out.write_text(args.secret + "\n", encoding="utf-8")
 
     print(f"已写入: {out}")
     print(f"节点数: {len(nodes)}")
