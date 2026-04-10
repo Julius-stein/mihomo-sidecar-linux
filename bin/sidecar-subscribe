@@ -118,13 +118,33 @@ summary_json=$(
       --summary-json
 )
 
-python3 - "${summary_json}" "${MIHOMO_HOME}" "${MIHOMO_SERVICE_NAME}" <<'PY'
+service_state="unknown"
+service_known=0
+service_enabled=0
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl status "${MIHOMO_SERVICE_NAME}" >/dev/null 2>&1; then
+    service_known=1
+  fi
+  if systemctl is-active --quiet "${MIHOMO_SERVICE_NAME}" 2>/dev/null; then
+    service_state="active"
+  elif [[ ${service_known} -eq 1 ]]; then
+    service_state="inactive"
+  fi
+  if systemctl is-enabled --quiet "${MIHOMO_SERVICE_NAME}" 2>/dev/null; then
+    service_enabled=1
+  fi
+fi
+
+python3 - "${summary_json}" "${MIHOMO_HOME}" "${MIHOMO_SERVICE_NAME}" "${service_state}" "${service_known}" "${service_enabled}" <<'PY'
 import json
 import sys
 
 summary = json.loads(sys.argv[1])
 work_dir = sys.argv[2]
 service_name = sys.argv[3]
+service_state = sys.argv[4]
+service_known = sys.argv[5] == "1"
+service_enabled = sys.argv[6] == "1"
 
 print("Subscription updated.")
 print()
@@ -149,18 +169,39 @@ else:
     current = selected[0] if selected else "-"
     print(f"  selection           single node: {current}")
 print()
+print("Service:")
+if service_state == "active":
+    print(f"  status              running ({service_name})")
+elif service_known:
+    suffix = "enabled" if service_enabled else "not enabled"
+    print(f"  status              installed but not running ({suffix})")
+else:
+    print(f"  status              unit state unknown ({service_name})")
+print()
 print("Next steps:")
-print(f"  1. Restart service if needed: sudo systemctl restart {service_name}")
-print(f"  2. Check current node: sidecar-node --current")
-print("  3. Verify installation: sudo sidecar-verify")
+if service_state == "active":
+    print(f"  1. Reload config: sudo systemctl restart {service_name}")
+    print("  2. Check current node: sidecar-node --current")
+    print("  3. Verify installation: sudo sidecar-verify")
+else:
+    print("  1. Reload systemd: sudo systemctl daemon-reload")
+    print(f"  2. Start service: sudo systemctl enable --now {service_name}")
+    print("  3. Check current node: sidecar-node --current")
+    print("  4. Verify installation: sudo sidecar-verify")
 PY
 
 if [[ ${restart_service} -eq 1 ]]; then
   echo
   echo "Service action:"
   if command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl restart "${MIHOMO_SERVICE_NAME}"
-    echo "  restarted ${MIHOMO_SERVICE_NAME}"
+    sudo systemctl daemon-reload
+    if systemctl is-active --quiet "${MIHOMO_SERVICE_NAME}" 2>/dev/null; then
+      sudo systemctl restart "${MIHOMO_SERVICE_NAME}"
+      echo "  restarted ${MIHOMO_SERVICE_NAME}"
+    else
+      sudo systemctl start "${MIHOMO_SERVICE_NAME}"
+      echo "  started ${MIHOMO_SERVICE_NAME}"
+    fi
   else
     echo "  systemctl not found; skipped restart" >&2
   fi

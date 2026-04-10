@@ -11,12 +11,29 @@ if [[ -z "${transparent_uids}" && -n "${MIHOMO_TARGET_UID:-}" ]]; then
   transparent_uids="${MIHOMO_TARGET_UID}"
 fi
 
+configured_tun_dev=""
+if [[ -f "${MIHOMO_CONFIG_YAML}" ]]; then
+  configured_tun_dev=$(awk -F': ' '/^[[:space:]]*device:[[:space:]]*/ {print $2; exit}' "${MIHOMO_CONFIG_YAML}" | tr -d '"'"'\"')
+fi
+
 # 等待 TUN 接口出现（最多 30s）
 for i in $(seq 1 30); do
   ip link show "$MIHOMO_TUN_DEV" &>/dev/null && break
   sleep 1
 done
-ip link show "$MIHOMO_TUN_DEV" &>/dev/null || { echo "$MIHOMO_TUN_DEV not found after 30s" >&2; exit 1; }
+if ! ip link show "$MIHOMO_TUN_DEV" &>/dev/null; then
+  echo "setup-rules failed: expected TUN device not found after 30s" >&2
+  echo "  expected device: ${MIHOMO_TUN_DEV}" >&2
+  if [[ -n "${configured_tun_dev}" ]]; then
+    echo "  config device:   ${configured_tun_dev}" >&2
+  fi
+  echo "  config file:     ${MIHOMO_CONFIG_YAML}" >&2
+  echo "Likely causes:" >&2
+  echo "  - Mihomo failed to create the TUN device" >&2
+  echo "  - runtime.env and config.yaml disagree on tun.device" >&2
+  echo "  - Mihomo startup failed before TUN became ready" >&2
+  exit 1
+fi
 
 # 防止 systemd-resolved 把该 TUN 当成系统 DNS 链路
 resolvectl dns "$MIHOMO_TUN_DEV" "" 2>/dev/null || true

@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import urllib
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -48,6 +49,15 @@ def api_request(path: str, method: str = "GET", data: dict | None = None):
             print(e.read().decode("utf-8", errors="replace"), file=sys.stderr)
         except Exception:
             pass
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        reason = getattr(e, "reason", e)
+        if isinstance(reason, ConnectionRefusedError):
+            print(f"无法连接 Mihomo controller: {API_BASE}", file=sys.stderr)
+            print("这通常表示 Mihomo service 还没有启动。", file=sys.stderr)
+            print(f"请先执行: sudo systemctl enable --now {CONFIG['MIHOMO_SERVICE_NAME']}", file=sys.stderr)
+            sys.exit(1)
+        print(f"请求失败: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"请求失败: {e}", file=sys.stderr)
