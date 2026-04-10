@@ -24,7 +24,7 @@ sidecar_set_defaults() {
   elif [[ -f "${script_dir}/../sidecar.env" ]]; then
     default_home=$(cd -- "${script_dir}/.." && pwd -P)
   elif [[ "$(basename -- "${script_dir}")" == "script" && -f "${script_dir}/../install.sh" ]]; then
-    default_home=$(cd -- "${script_dir}/.." && pwd -P)
+    default_home=$(cd -- "${script_dir}/.." && pwd -P)/workdir
   else
     default_home="${script_dir}"
   fi
@@ -71,19 +71,10 @@ sidecar_apply_derived_defaults() {
 }
 
 sidecar_load_config() {
-  local script_dir repo_root repo_config explicit_config home_config runtime_config
-
-  script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-  repo_root=""
-  repo_config=""
-  if [[ "$(basename -- "${script_dir}")" == "script" && -f "${script_dir}/../install.sh" ]]; then
-    repo_root=$(cd -- "${script_dir}/.." && pwd -P 2>/dev/null || true)
-    repo_config="${repo_root}/config/sidecar.env"
-  fi
+  local explicit_config home_config runtime_config
   explicit_config=${MIHOMO_SIDECAR_CONFIG:-}
 
   sidecar_set_defaults
-  sidecar_source_env_file "$repo_config"
   sidecar_source_env_file "$explicit_config"
 
   sidecar_apply_derived_defaults

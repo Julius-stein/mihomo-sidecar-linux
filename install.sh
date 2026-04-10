@@ -3,7 +3,7 @@ set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-usage: install.sh [--work-dir DIR] [--config FILE] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
+usage: install.sh [--config FILE] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
 
 Install mihomo-sidecar-linux runtime files and system integration.
 
@@ -15,8 +15,7 @@ Default command wrapper directory:
 
 Notes:
   - install.sh must be run as root
-  - default work dir is ./workdir under the cloned repository
-  - --mihomo-home is kept as a compatibility alias for --work-dir
+  - work dir is fixed to ./workdir under the cloned repository
 EOF
 }
 
@@ -30,7 +29,7 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
 install.sh must be run as root.
 
 Please rerun with sudo, for example:
-  sudo ./install.sh --work-dir /opt/mihomo-sidecar
+  sudo ./install.sh
 EOF
   exit 1
 fi
@@ -44,7 +43,6 @@ install_config=""
 systemd_unit_dir=""
 install_bin_dir=""
 skip_detect=0
-work_dir=""
 
 resolve_mihomo_bin() {
   if [[ -n "${MIHOMO_BIN:-}" && -x "${MIHOMO_BIN}" ]]; then
@@ -108,14 +106,6 @@ while [[ $# -gt 0 ]]; do
       install_config=$2
       shift 2
       ;;
-    --mihomo-home)
-      work_dir=$2
-      shift 2
-      ;;
-    --work-dir)
-      work_dir=$2
-      shift 2
-      ;;
     --mihomo-bin)
       MIHOMO_BIN=$2
       shift 2
@@ -144,11 +134,7 @@ if [[ -n "${install_config}" ]]; then
   sidecar_load_config
 fi
 
-if [[ -z "${work_dir}" ]]; then
-  work_dir="${ROOT_DIR}/workdir"
-fi
-
-MIHOMO_HOME=$(normalize_dir_path "${work_dir}")
+MIHOMO_HOME=$(normalize_dir_path "${ROOT_DIR}/workdir")
 
 if resolved_mihomo_bin=$(resolve_mihomo_bin); then
   MIHOMO_BIN="${resolved_mihomo_bin}"
