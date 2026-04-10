@@ -13,7 +13,7 @@ fi
 
 configured_tun_dev=""
 if [[ -f "${MIHOMO_CONFIG_YAML}" ]]; then
-  configured_tun_dev=$(awk -F': ' '/^[[:space:]]*device:[[:space:]]*/ {print $2; exit}' "${MIHOMO_CONFIG_YAML}" | tr -d '"'"'\"')
+  configured_tun_dev=$(awk -F': ' '/^[[:space:]]*device:[[:space:]]*/ {print $2; exit}' "${MIHOMO_CONFIG_YAML}" | tr -d '"')
 fi
 
 # 等待 TUN 接口出现（最多 30s）
