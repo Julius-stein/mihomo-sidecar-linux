@@ -30,7 +30,7 @@ fi
 sidecar_load_config
 
 if [[ $# -gt 0 && "$1" == "--all" ]]; then
-  sudo python3 "${MIHOMO_TRANSPARENT_MODE_SCRIPT}" \
+  sudo python3 "${SIDECAR_ROOT}/transparent_mode.py" \
     --config "${MIHOMO_HOME}/sidecar.env" \
     --action clear >/dev/null
   echo "transparent mode cleared for all uids"
@@ -38,7 +38,7 @@ if [[ $# -gt 0 && "$1" == "--all" ]]; then
 fi
 
 target_uid=${1:-$(id -u)}
-sudo python3 "${MIHOMO_TRANSPARENT_MODE_SCRIPT}" \
+sudo python3 "${SIDECAR_ROOT}/transparent_mode.py" \
   --config "${MIHOMO_HOME}/sidecar.env" \
   --action remove \
   --uid "${target_uid}" >/dev/null

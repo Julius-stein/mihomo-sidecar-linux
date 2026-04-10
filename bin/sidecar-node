@@ -26,4 +26,4 @@ else
 fi
 
 sidecar_load_config
-exec python3 "${MIHOMO_NODE_SCRIPT}" "$@"
+exec python3 "${SIDECAR_ROOT}/select_node.py" "$@"

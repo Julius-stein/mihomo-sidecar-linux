@@ -15,7 +15,4 @@ EOF
   exit 0
 fi
 
-if [[ -f "${BIN_DIR}/../script/common.sh" ]]; then
-  exec python3 "${BIN_DIR}/../script/verify.py" "$@"
-fi
-exec python3 "${BIN_DIR}/../verify.py" "$@"
+exec python3 "${SIDECAR_ROOT}/verify.py" "$@"

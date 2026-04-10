@@ -35,7 +35,7 @@ if [[ "${target_uid}" == "0" ]]; then
   exit 1
 fi
 
-sudo python3 "${MIHOMO_TRANSPARENT_MODE_SCRIPT}" \
+sudo python3 "${SIDECAR_ROOT}/transparent_mode.py" \
   --config "${MIHOMO_HOME}/sidecar.env" \
   --action add \
   --uid "${target_uid}" >/dev/null

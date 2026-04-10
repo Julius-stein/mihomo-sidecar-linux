@@ -3,19 +3,19 @@ set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-usage: install.sh --work-dir DIR [--config FILE] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
+usage: install.sh [--work-dir DIR] [--config FILE] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
 
 Install mihomo-sidecar-linux runtime files and system integration.
 
 Common path:
-  sudo ./install.sh --work-dir /opt/mihomo-sidecar
+  sudo ./install.sh
 
 Default command wrapper directory:
   /usr/local/bin
 
 Notes:
   - install.sh must be run as root
-  - --work-dir is required; there is no implicit default
+  - default work dir is ./workdir under the cloned repository
   - --mihomo-home is kept as a compatibility alias for --work-dir
 EOF
 }
@@ -145,13 +145,7 @@ if [[ -n "${install_config}" ]]; then
 fi
 
 if [[ -z "${work_dir}" ]]; then
-  cat >&2 <<'EOF'
-missing required option: --work-dir DIR
-
-Example:
-  sudo ./install.sh --work-dir /opt/mihomo-sidecar
-EOF
-  exit 2
+  work_dir="${ROOT_DIR}/workdir"
 fi
 
 MIHOMO_HOME=$(normalize_dir_path "${work_dir}")

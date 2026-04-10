@@ -42,8 +42,8 @@ echo "  tun device          ${MIHOMO_TUN_DEV}"
 echo "  controller          ${MIHOMO_API_HOST}:${MIHOMO_API_PORT}"
 echo "  dns port            ${MIHOMO_DNS_PORT}"
 
-if [[ -x "${MIHOMO_NODE_SCRIPT}" ]]; then
-  current_node=$(python3 "${MIHOMO_NODE_SCRIPT}" --current 2>/dev/null || true)
+if [[ -x "${SIDECAR_ROOT}/select_node.py" ]]; then
+  current_node=$(python3 "${SIDECAR_ROOT}/select_node.py" --current 2>/dev/null || true)
   if [[ -n "${current_node}" ]]; then
     echo
     echo "Node:"

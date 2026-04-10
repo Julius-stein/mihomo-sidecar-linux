@@ -107,13 +107,13 @@ if [[ ${list_only} -eq 1 ]]; then
   echo "Available nodes:"
   echo
   MIHOMO_SIDECAR_CONFIG="${MIHOMO_HOME}/sidecar.env" \
-    python3 "${MIHOMO_SUB2MIHOMO_SCRIPT}" "${sub_args[@]}"
+    python3 "${SIDECAR_ROOT}/sub2mihomo.py" "${sub_args[@]}"
   exit 0
 fi
 
 summary_json=$(
   MIHOMO_SIDECAR_CONFIG="${MIHOMO_HOME}/sidecar.env" \
-    python3 "${MIHOMO_SUB2MIHOMO_SCRIPT}" \
+    python3 "${SIDECAR_ROOT}/sub2mihomo.py" \
       "${sub_args[@]}" \
       --summary-json
 )
