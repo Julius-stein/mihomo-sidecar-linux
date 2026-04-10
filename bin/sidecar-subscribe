@@ -31,6 +31,7 @@ sidecar_load_config
 subscription_url=""
 subscription_file=""
 restart_service=0
+list_only=0
 passthrough=()
 
 while [[ $# -gt 0 ]]; do
@@ -53,6 +54,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --restart)
       restart_service=1
+      shift
+      ;;
+    --list)
+      list_only=1
+      passthrough+=("$1")
       shift
       ;;
     *)
@@ -81,18 +87,76 @@ fi
 
 controller_secret=$(tr -d '\r\n' < "${MIHOMO_SECRET_FILE}")
 subscription_source="${subscription_url:-${subscription_file}}"
+sub_args=(
+  --source "${subscription_source}"
+  --output "${MIHOMO_CONFIG_YAML}"
+  --secret "${controller_secret}"
+  --controller-secret-output "${MIHOMO_SECRET_FILE}"
+  --save-raw-dir "${MIHOMO_HOME}/sub"
+)
+if [[ ${#passthrough[@]} -gt 0 ]]; then
+  sub_args+=("${passthrough[@]}")
+fi
 
-python3 "${MIHOMO_SUB2MIHOMO_SCRIPT}" \
-  --source "${subscription_source}" \
-  --output "${MIHOMO_CONFIG_YAML}" \
-  --secret "${controller_secret}" \
-  --controller-secret-output "${MIHOMO_SECRET_FILE}" \
-  "${passthrough[@]}"
+if [[ ${list_only} -eq 1 ]]; then
+  echo "Available nodes:"
+  echo
+  MIHOMO_SIDECAR_CONFIG="${MIHOMO_HOME}/sidecar.env" \
+    python3 "${MIHOMO_SUB2MIHOMO_SCRIPT}" "${sub_args[@]}"
+  exit 0
+fi
+
+summary_json=$(
+  MIHOMO_SIDECAR_CONFIG="${MIHOMO_HOME}/sidecar.env" \
+    python3 "${MIHOMO_SUB2MIHOMO_SCRIPT}" \
+      "${sub_args[@]}" \
+      --summary-json
+)
+
+python3 - "${summary_json}" "${MIHOMO_HOME}" "${MIHOMO_SERVICE_NAME}" <<'PY'
+import json
+import sys
+
+summary = json.loads(sys.argv[1])
+work_dir = sys.argv[2]
+service_name = sys.argv[3]
+
+print("Subscription updated.")
+print()
+print("Work dir:")
+print(f"  {work_dir}")
+print()
+print("Generated:")
+print(f"  config.yaml         {summary['output']}")
+print(f"  raw subscription    {summary['raw_output']}")
+print(f"  decoded subscription {summary['decoded_output']}")
+if summary.get("controller_secret_output"):
+    print(f"  controller secret   {summary['controller_secret_output']}")
+print()
+print("Node summary:")
+print(f"  total nodes         {summary['total_nodes']}")
+print(f"  written nodes       {summary['written_nodes']}")
+print(f"  proxy group         {summary['proxy_group']}")
+if summary["selection_mode"] == "all":
+    print("  selection           all nodes written to config")
+else:
+    selected = summary.get("selected_names") or []
+    current = selected[0] if selected else "-"
+    print(f"  selection           single node: {current}")
+print()
+print("Next steps:")
+print(f"  1. Restart service if needed: sudo systemctl restart {service_name}")
+print(f"  2. Check current node: sidecar-node --current")
+print("  3. Verify installation: sudo sidecar-verify")
+PY
 
 if [[ ${restart_service} -eq 1 ]]; then
+  echo
+  echo "Service action:"
   if command -v systemctl >/dev/null 2>&1; then
     sudo systemctl restart "${MIHOMO_SERVICE_NAME}"
+    echo "  restarted ${MIHOMO_SERVICE_NAME}"
   else
-    echo "systemctl not found; skipped restart" >&2
+    echo "  systemctl not found; skipped restart" >&2
   fi
 fi

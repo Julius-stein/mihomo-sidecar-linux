@@ -1,8 +1,9 @@
 # Example shell snippet for mihomo-sidecar-linux
 # Do not store real secrets in this file. Copy the lines you need into ~/.bashrc or ~/.zshrc.
 
-export MIHOMO_HOME="${HOME}/.mihomo"
+export MIHOMO_HOME="/opt/mihomo-sidecar"
 export MIHOMO_API_SECRET="<REPLACE_WITH_MIHOMO_CONTROLLER_SECRET>"
+export PATH="${HOME}/.local/bin:$PATH"
 
 alias sidecar-node='python "$MIHOMO_HOME/select_node.py"'
 alias sidecar-restart='sudo systemctl restart mihomo-sidecar.service'

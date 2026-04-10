@@ -24,16 +24,26 @@ fi
 
 sidecar_load_config
 
-echo "service=${MIHOMO_SERVICE_NAME}"
-echo "mihomo_home=${MIHOMO_HOME}"
-echo "gid_mode_group=${MIHOMO_SIDECAR_GROUP}"
-echo "gid_mode_gid=${MIHOMO_TARGET_GID}"
-echo "transparent_enabled=${MIHOMO_TRANSPARENT_ENABLED}"
-echo "transparent_uids=${MIHOMO_TRANSPARENT_UIDS:-}"
-echo "tun_dev=${MIHOMO_TUN_DEV}"
-echo "api=${MIHOMO_API_HOST}:${MIHOMO_API_PORT}"
-echo "dns_port=${MIHOMO_DNS_PORT}"
+echo "Sidecar status"
+echo
+echo "Runtime:"
+echo "  work dir            ${MIHOMO_HOME}"
+echo "  service             ${MIHOMO_SERVICE_NAME}"
+echo "  sidecar group       ${MIHOMO_SIDECAR_GROUP}"
+echo "  target gid          ${MIHOMO_TARGET_GID}"
+echo "  transparent mode    ${MIHOMO_TRANSPARENT_ENABLED}"
+echo "  transparent uids    ${MIHOMO_TRANSPARENT_UIDS:-<none>}"
+echo
+echo "Network:"
+echo "  tun device          ${MIHOMO_TUN_DEV}"
+echo "  controller          ${MIHOMO_API_HOST}:${MIHOMO_API_PORT}"
+echo "  dns port            ${MIHOMO_DNS_PORT}"
 
 if [[ -x "${MIHOMO_NODE_SCRIPT}" ]]; then
-  python3 "${MIHOMO_NODE_SCRIPT}" --current 2>/dev/null || true
+  current_node=$(python3 "${MIHOMO_NODE_SCRIPT}" --current 2>/dev/null || true)
+  if [[ -n "${current_node}" ]]; then
+    echo
+    echo "Node:"
+    printf '  %s\n' "${current_node}"
+  fi
 fi

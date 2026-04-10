@@ -289,6 +289,11 @@ def main():
         "--controller-secret-output",
         help="把实际使用的 controller secret 单独写入文件",
     )
+    ap.add_argument(
+        "--summary-json",
+        action="store_true",
+        help="输出机器可读 JSON 摘要；供外层命令包装使用",
+    )
     args = ap.parse_args()
 
     if not args.secret:
@@ -310,6 +315,24 @@ def main():
         sys.exit(2)
 
     if args.list:
+        if args.summary_json:
+            summary = {
+                "mode": "list",
+                "source": args.source,
+                "total_nodes": len(nodes),
+                "nodes": [
+                    {
+                        "index": i,
+                        "name": n["name"],
+                        "server": n["server"],
+                        "port": n["port"],
+                        "sni": n.get("sni", ""),
+                    }
+                    for i, n in enumerate(nodes)
+                ],
+            }
+            print(json.dumps(summary, ensure_ascii=False))
+            return
         print_nodes(nodes)
         return
 
@@ -341,6 +364,26 @@ def main():
         secret_out = Path(args.controller_secret_output)
         secret_out.parent.mkdir(parents=True, exist_ok=True)
         secret_out.write_text(args.secret + "\n", encoding="utf-8")
+
+    selection_mode = "all" if args.all_nodes else "single"
+    selected_names = [n["name"] for n in (nodes if args.all_nodes else chosen)]
+    summary = {
+        "mode": "generate",
+        "source": args.source,
+        "output": str(out),
+        "raw_output": str(save_dir / "sub.raw"),
+        "decoded_output": str(save_dir / "sub.decoded"),
+        "controller_secret_output": args.controller_secret_output or "",
+        "total_nodes": len(nodes),
+        "written_nodes": len(nodes if args.all_nodes else chosen),
+        "selection_mode": selection_mode,
+        "selected_names": selected_names,
+        "proxy_group": args.group_name,
+    }
+
+    if args.summary_json:
+        print(json.dumps(summary, ensure_ascii=False))
+        return
 
     print(f"已写入: {out}")
     print(f"节点数: {len(nodes)}")

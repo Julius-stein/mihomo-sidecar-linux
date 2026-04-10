@@ -3,21 +3,36 @@ set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-usage: install.sh [--config FILE] [--mihomo-home DIR] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
+usage: install.sh --work-dir DIR [--config FILE] [--mihomo-bin PATH] [--systemd-unit-dir DIR] [--install-bin-dir DIR] [--skip-detect]
 
 Install mihomo-sidecar-linux runtime files and system integration.
 
 Common path:
-  sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
+  sudo ./install.sh --work-dir /opt/mihomo-sidecar
 
-If --mihomo-home is omitted, install.sh uses a repo-local runtime directory:
-  ./.runtime
+Default command wrapper directory:
+  /usr/local/bin
+
+Notes:
+  - install.sh must be run as root
+  - --work-dir is required; there is no implicit default
+  - --mihomo-home is kept as a compatibility alias for --work-dir
 EOF
 }
 
 if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
   show_help
   exit 0
+fi
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  cat >&2 <<'EOF'
+install.sh must be run as root.
+
+Please rerun with sudo, for example:
+  sudo ./install.sh --work-dir /opt/mihomo-sidecar
+EOF
+  exit 1
 fi
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -29,6 +44,7 @@ install_config=""
 systemd_unit_dir=""
 install_bin_dir=""
 skip_detect=0
+work_dir=""
 
 resolve_mihomo_bin() {
   if [[ -n "${MIHOMO_BIN:-}" && -x "${MIHOMO_BIN}" ]]; then
@@ -60,6 +76,16 @@ detect_systemd_unit_dir() {
   return 1
 }
 
+write_bin_wrapper() {
+  local target_dir=$1 cmd_name=$2 target_path=$3 wrapper_path
+  wrapper_path="${target_dir}/${cmd_name}"
+  cat > "${wrapper_path}" <<EOF
+#!/bin/bash
+exec "${target_path}" "\$@"
+EOF
+  chmod 0755 "${wrapper_path}"
+}
+
 generate_secret() {
   python3 - <<'PY'
 import secrets
@@ -74,7 +100,11 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --mihomo-home)
-      MIHOMO_HOME=$2
+      work_dir=$2
+      shift 2
+      ;;
+    --work-dir)
+      work_dir=$2
       shift 2
       ;;
     --mihomo-bin)
@@ -105,6 +135,18 @@ if [[ -n "${install_config}" ]]; then
   sidecar_load_config
 fi
 
+if [[ -z "${work_dir}" ]]; then
+  cat >&2 <<'EOF'
+missing required option: --work-dir DIR
+
+Example:
+  sudo ./install.sh --work-dir /opt/mihomo-sidecar
+EOF
+  exit 2
+fi
+
+MIHOMO_HOME=${work_dir}
+
 if resolved_mihomo_bin=$(resolve_mihomo_bin); then
   MIHOMO_BIN="${resolved_mihomo_bin}"
 else
@@ -133,6 +175,20 @@ if [[ -z "${systemd_unit_dir}" ]] && command -v systemctl >/dev/null 2>&1; then
   if [[ -n "${detected_unit_dir}" && ( -w "${detected_unit_dir}" || ${EUID:-$(id -u)} -eq 0 ) ]]; then
     systemd_unit_dir="${detected_unit_dir}"
   fi
+fi
+
+if [[ -z "${install_bin_dir}" ]]; then
+  install_bin_dir="/usr/local/bin"
+fi
+
+if [[ -z "${systemd_unit_dir}" ]]; then
+  cat >&2 <<'EOF'
+failed to detect the systemd unit directory.
+
+Please rerun with:
+  --systemd-unit-dir /etc/systemd/system
+EOF
+  exit 1
 fi
 
 mkdir -p "${MIHOMO_HOME}" "${MIHOMO_STATE_DIR}" "${MIHOMO_HOME}/bin"
@@ -203,22 +259,44 @@ fi
 if [[ -n "${install_bin_dir}" ]]; then
   install -d "${install_bin_dir}"
   for src in sidecar sidecar-node sidecar-subscribe sidecar-validate sidecar-verify sidecar-on sidecar-off sidecar-status; do
-    install -m 0755 "${ROOT_DIR}/bin/${src}" "${install_bin_dir}/${src}"
+    write_bin_wrapper "${install_bin_dir}" "${src}" "${MIHOMO_HOME}/bin/${src}"
   done
 fi
 
-echo "installed to ${MIHOMO_HOME}"
-echo "mihomo binary: ${MIHOMO_BIN}"
-echo "config: ${MIHOMO_CONFIG_YAML}"
-echo "runtime env: ${MIHOMO_STATE_DIR}/runtime.env"
-echo "controller secret: ${MIHOMO_SECRET_FILE}"
-echo "systemd unit: ${rendered_unit}"
+cat <<EOF
+Install completed.
+
+Work dir:
+  ${MIHOMO_HOME}
+
+Installed:
+  mihomo binary      ${MIHOMO_BIN}
+  sidecar env        ${MIHOMO_HOME}/sidecar.env
+  runtime env        ${MIHOMO_STATE_DIR}/runtime.env
+  controller secret  ${MIHOMO_SECRET_FILE}
+  systemd unit       ${systemd_unit_dir}/${MIHOMO_SERVICE_NAME}
+  command wrappers   ${install_bin_dir}
+EOF
+
 if [[ -f "${MIHOMO_CONFIG_YAML}" ]]; then
-  echo "config status: existing config.yaml detected"
+  echo
+  echo "Config status:"
+  echo "  existing config.yaml detected at ${MIHOMO_CONFIG_YAML}"
 else
-  echo "config status: config.yaml not created yet"
-  echo "next step: ${MIHOMO_HOME}/bin/sidecar-subscribe --url 'https://example.com/subscription'"
+  echo
+  echo "Config status:"
+  echo "  config.yaml not created yet"
 fi
-if [[ -n "${systemd_unit_dir}" ]]; then
-  echo "installed unit copy: ${systemd_unit_dir}/${MIHOMO_SERVICE_NAME}"
-fi
+
+cat <<EOF
+
+Next steps:
+  1. Generate config:
+     sidecar-subscribe --url 'https://example.com/subscription' --all-nodes
+  2. Reload systemd:
+     sudo systemctl daemon-reload
+  3. Enable service:
+     sudo systemctl enable --now ${MIHOMO_SERVICE_NAME}
+  4. Verify:
+     sudo sidecar-verify
+EOF

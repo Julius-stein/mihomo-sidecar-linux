@@ -13,7 +13,7 @@
 当前仓库已经具备统一配置、资源自动探测、安装脚本、节点选择、验证脚本和多 UID 透明代理状态管理。推荐使用方式是：
 
 1. `git clone`
-2. `sudo ./install.sh`
+2. `sudo ./install.sh --work-dir /opt/mihomo-sidecar`
 3. 用 `sidecar-subscribe` 导入订阅生成 `config.yaml`
 4. 把需要使用进程级代理的用户加入 `sidecar` 组
 5. 普通场景优先使用 `sidecar <cmd>`
@@ -24,8 +24,8 @@
 - 不再默认使用 `~/.mihomo`
 - 不再假设 `mihomo` 固定安装在 `/usr/local/bin/mihomo`
 - 不再默认扫描用户家目录里的 Mihomo 运行目录
-
-如果没有显式传 `--mihomo-home`，安装器会使用仓库内的 `./.runtime` 作为默认运行目录，便于开发机试装；面向正式部署时，仍建议显式指定例如 `/opt/mihomo-sidecar`。
+- `install.sh` 不再允许缺省工作目录安装
+- `install.sh` 不再允许普通用户直接“假安装”
 
 ## 项目目标
 
@@ -100,13 +100,7 @@ cd mihomo-sidecar-linux
 最常见的安装方式：
 
 ```bash
-sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
-```
-
-如果你只是想先在当前仓库里快速装一份运行目录，也可以省略 `--mihomo-home`，这时默认落在：
-
-```bash
-./.runtime
+sudo ./install.sh --work-dir /opt/mihomo-sidecar
 ```
 
 安装器会做这些事：
@@ -115,12 +109,27 @@ sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
 - 如果没配置，再自动 `which mihomo`
 - 还找不到时，直接报错并给出官方 release 链接
 - 安装脚本和 CLI
+- 自动把命令入口安装到可执行目录
 - 生成 `${MIHOMO_HOME}/sidecar.env`
 - 自动探测共享资源并生成 `${MIHOMO_HOME}/state/runtime.env`
 - 生成 `${MIHOMO_HOME}/state/controller.secret`
 - 渲染 systemd unit
+- 把 systemd unit 安装到 `/etc/systemd/system`
+- 把命令入口安装到 `/usr/local/bin`
 
-如果当前环境能检测到 systemd 且目标 unit 目录可写，安装器也会顺手把 unit 拷进去。
+限制：
+
+- `install.sh` 必须用 `sudo` 运行
+- `--work-dir` 是必填项，没有隐式默认值
+- 用户态如需只看资源探测结果，请直接运行 `python3 script/detect_runtime.py`
+
+也就是说，真正面向服务器部署的主路径应该是：
+
+```bash
+sudo ./install.sh --work-dir /opt/mihomo-sidecar
+sudo systemctl daemon-reload
+sudo systemctl enable --now mihomo-sidecar.service
+```
 
 ### 3. 导入订阅 / 生成配置
 
@@ -144,11 +153,11 @@ sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
 常见示例：
 
 ```bash
-/opt/mihomo-sidecar/bin/sidecar-subscribe --url 'https://example.com/subscription' --all-nodes
+sidecar-subscribe --url 'https://example.com/subscription' --all-nodes
 ```
 
 ```bash
-/opt/mihomo-sidecar/bin/sidecar-subscribe --file ./sub.txt --keyword HK
+sidecar-subscribe --file ./sub.txt --keyword HK
 ```
 
 如果希望写完配置后立即重启服务，可以追加：
@@ -159,7 +168,7 @@ sudo ./install.sh --mihomo-home /opt/mihomo-sidecar
 
 ### 4. 按需准备静态配置
 
-默认情况下，不改任何文件也能直接运行安装器，但正式部署仍建议显式传入 `--mihomo-home`，不要依赖开发态默认目录。
+这里建议把“工作目录”和“静态参数”都显式写清楚，不要依赖任何隐式推导。
 
 如果你想显式指定路径和组信息，可以先复制模板：
 
@@ -170,6 +179,7 @@ cp config/sidecar.env.example config/sidecar.env
 常见需要调整的静态项：
 
 - `MIHOMO_HOME`
+  说明：这是兼容历史脚本的内部变量名，语义上就是本项目的工作目录
 - `MIHOMO_BIN`
 - `MIHOMO_TARGET_GID`
 - `MIHOMO_SIDECAR_GROUP`
@@ -419,7 +429,7 @@ sidecar-subscribe --url 'https://example.com/subscription' --all-nodes --restart
 
 ```bash
 sudo ./install.sh \
-  --mihomo-home /opt/mihomo-sidecar \
+  --work-dir /opt/mihomo-sidecar \
   --mihomo-bin /path/to/mihomo
 ```
 
