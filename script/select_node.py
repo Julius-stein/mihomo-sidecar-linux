@@ -18,55 +18,75 @@ API_BASE = f"http://{CONFIG['MIHOMO_API_HOST']}:{CONFIG['MIHOMO_API_PORT']}"
 PROXY_GROUP = CONFIG["MIHOMO_PROXY_GROUP"]
 
 
+def auth_header_candidates(secret: str) -> list[dict[str, str]]:
+    return [
+        {"Authorization": f"Bearer {secret}"},
+        {"Authorization": secret},
+        {"X-Secret": secret},
+    ]
+
+
 def api_request(path: str, method: str = "GET", data: dict | None = None):
     if not API_SECRET:
         print("缺少环境变量 MIHOMO_API_SECRET", file=sys.stderr)
         sys.exit(2)
 
     body = None
-    headers = {
-        "Authorization": f"Bearer {API_SECRET}",
-    }
     if data is not None:
         body = json.dumps(data).encode("utf-8")
-        headers["Content-Type"] = "application/json"
 
-    req = urllib.request.Request(
-        API_BASE + path,
-        data=body,
-        headers=headers,
-        method=method,
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            if raw:
-                return json.loads(raw)
-            return None
-    except urllib.error.HTTPError as e:
-        print(f"HTTP 错误: {e.code} {e.reason}", file=sys.stderr)
+    last_http_error: urllib.error.HTTPError | None = None
+    for auth_headers in auth_header_candidates(API_SECRET):
+        headers = dict(auth_headers)
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(
+            API_BASE + path,
+            data=body,
+            headers=headers,
+            method=method,
+        )
         try:
-            print(e.read().decode("utf-8", errors="replace"), file=sys.stderr)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                if raw:
+                    return json.loads(raw)
+                return None
+        except urllib.error.HTTPError as e:
+            last_http_error = e
+            if e.code == 401:
+                continue
+            print(f"HTTP 错误: {e.code} {e.reason}", file=sys.stderr)
+            try:
+                print(e.read().decode("utf-8", errors="replace"), file=sys.stderr)
+            except Exception:
+                pass
+            sys.exit(1)
+        except urllib.error.URLError as e:
+            reason = getattr(e, "reason", e)
+            if isinstance(reason, ConnectionRefusedError):
+                print(f"无法连接 Mihomo controller: {API_BASE}", file=sys.stderr)
+                print("这通常表示 Mihomo service 还没有启动。", file=sys.stderr)
+                print(f"请先执行: sudo systemctl enable --now {CONFIG['MIHOMO_SERVICE_NAME']}", file=sys.stderr)
+                sys.exit(1)
+            print(f"请求失败: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"请求失败: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if last_http_error is not None:
+        print(f"HTTP 错误: {last_http_error.code} {last_http_error.reason}", file=sys.stderr)
+        try:
+            print(last_http_error.read().decode("utf-8", errors="replace"), file=sys.stderr)
         except Exception:
             pass
-        if e.code == 401:
-            print(f"controller: {API_BASE}", file=sys.stderr)
-            print(f"secret file: {CONFIG['MIHOMO_SECRET_FILE']}", file=sys.stderr)
-            print(f"config file: {CONFIG['MIHOMO_CONFIG_YAML']}", file=sys.stderr)
-            print("这通常表示 controller secret 不一致，或命令和 service 读取的不是同一套 workdir。", file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        reason = getattr(e, "reason", e)
-        if isinstance(reason, ConnectionRefusedError):
-            print(f"无法连接 Mihomo controller: {API_BASE}", file=sys.stderr)
-            print("这通常表示 Mihomo service 还没有启动。", file=sys.stderr)
-            print(f"请先执行: sudo systemctl enable --now {CONFIG['MIHOMO_SERVICE_NAME']}", file=sys.stderr)
-            sys.exit(1)
-        print(f"请求失败: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"请求失败: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"controller: {API_BASE}", file=sys.stderr)
+        print(f"secret file: {CONFIG['MIHOMO_SECRET_FILE']}", file=sys.stderr)
+        print(f"config file: {CONFIG['MIHOMO_CONFIG_YAML']}", file=sys.stderr)
+        print("已尝试 Bearer / raw Authorization / X-Secret 三种鉴权头。", file=sys.stderr)
+        print("这通常表示 controller secret 不一致，或命令和 service 读取的不是同一套 workdir。", file=sys.stderr)
+    sys.exit(1)
 
 
 def get_proxy_group_info():

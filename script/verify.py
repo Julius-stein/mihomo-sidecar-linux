@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import json
 import os
 import random
 import shutil
@@ -165,6 +166,48 @@ def fetch_public_ip(url: str) -> str:
         return resp.read().decode("utf-8", errors="replace").strip()
 
 
+def controller_auth_headers(secret: str) -> list[dict[str, str]]:
+    return [
+        {"Authorization": f"Bearer {secret}"},
+        {"Authorization": secret},
+        {"X-Secret": secret},
+    ]
+
+
+def read_secret(config: dict) -> str:
+    secret_file = Path(config["MIHOMO_SECRET_FILE"]).expanduser()
+    if not secret_file.is_file():
+        raise FileNotFoundError(f"secret file not found: {secret_file}")
+    secret = secret_file.read_text(encoding="utf-8", errors="replace").strip()
+    if not secret:
+        raise RuntimeError(f"secret file is empty: {secret_file}")
+    return secret
+
+
+def controller_api_ok(config: dict) -> tuple[bool, str]:
+    secret = read_secret(config)
+    base_url = f"http://{config['MIHOMO_API_HOST']}:{config['MIHOMO_API_PORT']}"
+    last_error = ""
+    for headers in controller_auth_headers(secret):
+        req = urllib.request.Request(base_url + "/version", headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                if not body:
+                    return True, "controller responded with empty body"
+                try:
+                    parsed = json.loads(body)
+                    version = parsed.get("version") or parsed.get("meta")
+                    if version:
+                        return True, str(version)
+                except Exception:
+                    pass
+                return True, body
+        except Exception as exc:
+            last_error = str(exc)
+    return False, last_error or "controller auth failed"
+
+
 def sidecar_fetch_public_ip(sidecar_bin: Path, url: str) -> str:
     py_code = (
         "import urllib.request;"
@@ -202,6 +245,12 @@ def main() -> None:
 
     active, detail = systemctl_is_active(config["MIHOMO_SERVICE_NAME"])
     add_result(results, "PASS" if active else "FAIL", "service_active", detail or "service is active")
+
+    try:
+        controller_ok, controller_detail = controller_api_ok(config)
+        add_result(results, "PASS" if controller_ok else "FAIL", "controller_api", controller_detail)
+    except Exception as exc:
+        add_result(results, "FAIL", "controller_api", str(exc))
 
     tun_ok = ip_link_exists(config["MIHOMO_TUN_DEV"])
     add_result(results, "PASS" if tun_ok else "FAIL", "tun_exists", config["MIHOMO_TUN_DEV"])
